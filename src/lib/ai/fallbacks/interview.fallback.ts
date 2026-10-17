@@ -271,49 +271,121 @@ export function evaluateAnswerFallback(
     };
   }
 
+  // Anti-gaming Check 1: Answer copies back the question text or a large substring of it
+  const cleanQ = questionText.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+  const cleanA = lower.replace(/[^a-z0-9\s]/g, ' ').trim();
+  const questionWords = new Set(cleanQ.split(/\s+/).filter((w) => w.length > 3));
+
+  // Compute question overlap ratio
+  const answerWords = cleanA.split(/\s+/).filter(Boolean);
+  let overlapWithQCount = 0;
+  for (const w of answerWords) {
+    if (questionWords.has(w)) overlapWithQCount++;
+  }
+  const questionEchoRatio = overlapWithQCount / Math.max(1, answerWords.length);
+
+  // If >= 70% of words are just repeating the question, score 2
+  if (questionEchoRatio >= 0.7 && wordCount <= cleanQ.split(/\s+/).length + 5) {
+    return {
+      score: 2,
+      strengths: ['Identified the prompt topic.'],
+      improvements: [
+        'The submitted answer appears to echo or repeat the interview question instead of providing an explanation.',
+        'Please write an original answer detailing your technical solution, mechanisms, and reasoning.',
+      ],
+      improvedSampleAnswer: `When answering "${questionText}", a strong candidate clearly states the definition, provides the internal mechanism, and illustrates with a production example.`,
+      source: 'fallback',
+    };
+  }
+
+  // Anti-gaming Check 2: Raw keyword list without natural sentence structure
+  // Detect lists: contains commas or bullets with very few verbs/sentence markers
+  const sentenceCount = (trimmed.match(/[.!?](\s|$)/g) || []).length;
+  const verbOrConnectiveCount = (lower.match(/\b(is|are|was|were|means|works|because|when|which|how|handles|returns|used|using)\b/g) || []).length;
+  const isKeywordList = (wordCount >= 10 && sentenceCount === 0 && verbOrConnectiveCount <= 1) ||
+                        (trimmed.includes(',') && trimmed.split(',').length >= 5 && verbOrConnectiveCount <= 1);
+
+  if (isKeywordList) {
+    return {
+      score: 2,
+      strengths: ['Included relevant industry keywords.'],
+      improvements: [
+        'Your answer is formatted as an isolated list of keywords or tags rather than complete explanatory sentences.',
+        'Explain how these tools and concepts interact, why you chose them, and what architectural problem they solve.',
+      ],
+      improvedSampleAnswer: `When answering "${questionText}", present your thoughts in full sentences explaining how the concepts link together and solve the prompt problem.`,
+      source: 'fallback',
+    };
+  }
+
   // Find relevant bank item for expected keywords and high-quality model answer
   const allItems = [...QUESTION_BANKS['junior-frontend-developer'], ...QUESTION_BANKS['data-analyst'], ...GENERIC_QUESTION_BANK];
   const matched = allItems.find((item) => item.question.toLowerCase().slice(0, 25) === questionText.toLowerCase().slice(0, 25));
 
-  const expectedKeywords = matched ? matched.expectedKeywords : ['process', 'solution', 'approach', 'implementation'];
+  const rawExpectedKeywords = matched ? matched.expectedKeywords : ['process', 'solution', 'approach', 'implementation'];
+  // ANTI-GAMING: filter out any expected keywords that appear in the question text itself!
+  const filteredExpectedKeywords = rawExpectedKeywords.filter((kw) => !cleanQ.includes(kw.toLowerCase()));
+  const expectedKeywords = filteredExpectedKeywords.length > 0 ? filteredExpectedKeywords : rawExpectedKeywords;
+
   const matchedKeywords = expectedKeywords.filter((kw) => lower.includes(kw.toLowerCase()));
   const keywordRatio = matchedKeywords.length / Math.max(1, expectedKeywords.length);
 
   // Deterministic scoring rubric:
   // Base score from word count depth:
   let depthScore = 4;
-  if (wordCount >= 25 && wordCount < 50) depthScore = 6;
-  else if (wordCount >= 50 && wordCount < 100) depthScore = 7;
-  else if (wordCount >= 100) depthScore = 8;
+  if (wordCount >= 25 && wordCount < 50) depthScore = 5;
+  else if (wordCount >= 50 && wordCount < 100) depthScore = 6;
+  else if (wordCount >= 100) depthScore = 7;
 
   // Bonus for keyword coverage:
   let keywordBonus = 0;
-  if (keywordRatio >= 0.5) keywordBonus = 1;
-  if (keywordRatio >= 0.75) keywordBonus = 2;
+  if (keywordRatio >= 0.4) keywordBonus = 1;
+  if (keywordRatio >= 0.7) keywordBonus = 2;
 
   // Structure bonus: check for STAR markers if behavioral or code/mechanics if technical
   let structureBonus = 0;
-  if (questionType === 'behavioral' && (lower.includes('situation') || lower.includes('result') || lower.includes('action') || lower.includes('learned'))) {
-    structureBonus = 1;
-  } else if (lower.includes('for example') || lower.includes('because') || lower.includes('specifically')) {
-    structureBonus = 1;
+  let starComplete = false;
+
+  if (questionType === 'behavioral') {
+    const hasSituation = lower.includes('situation') || lower.includes('in my') || lower.includes('during') || lower.includes('when i was');
+    const hasTask = lower.includes('task') || lower.includes('goal') || lower.includes('needed to') || lower.includes('responsible for');
+    const hasAction = lower.includes('action') || lower.includes('i implemented') || lower.includes('i took') || lower.includes('i resolved') || lower.includes('i used');
+    const hasResult = lower.includes('result') || lower.includes('outcome') || lower.includes('finally') || lower.includes('learned') || lower.includes('achieved');
+
+    const starCount = [hasSituation, hasTask, hasAction, hasResult].filter(Boolean).length;
+    if (starCount >= 3) {
+      structureBonus = 2;
+      starComplete = true;
+    } else if (starCount >= 2) {
+      structureBonus = 1;
+    }
+  } else {
+    if (lower.includes('for example') || lower.includes('because') || lower.includes('specifically') || lower.includes('difference between')) {
+      structureBonus = 1;
+    }
   }
 
   const finalScore = Math.min(10, Math.max(3, depthScore + keywordBonus + structureBonus));
 
   const strengths: string[] = [
-    `Clear communication and solid answer length (${wordCount} words provided).`,
+    `Clear communication with substantive detail (${wordCount} words provided).`,
   ];
   if (matchedKeywords.length > 0) {
     strengths.push(`Good technical terminology covered: ${matchedKeywords.slice(0, 3).join(', ')}.`);
   } else {
     strengths.push('Demonstrated practical thinking and direct engagement with the question.');
   }
+  if (questionType === 'behavioral' && starComplete) {
+    strengths.push('Excellent structured response demonstrating components of the STAR method (Situation, Task, Action, Result).');
+  }
 
   const improvements: string[] = [];
   const missingKws = expectedKeywords.filter((kw) => !lower.includes(kw.toLowerCase()));
   if (missingKws.length > 0) {
     improvements.push(`Could incorporate additional key concepts such as: ${missingKws.slice(0, 3).join(', ')}.`);
+  }
+  if (questionType === 'behavioral' && !starComplete) {
+    improvements.push('Structure your answer more clearly using the STAR framework: explicitly describe the Situation, Task, Action you took, and final measurable Result.');
   }
   if (wordCount < 60) {
     improvements.push('Consider elaborating with a concrete real-world project example or edge case to show deeper mastery.');

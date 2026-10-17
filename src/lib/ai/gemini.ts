@@ -41,7 +41,14 @@ export async function executeGeminiWithRetry<T>(
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const result = await model.generateContent(prompt);
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Gemini API call timed out after 20000ms')), 20000)
+        );
+
+        const result = (await Promise.race([
+          model.generateContent(prompt),
+          timeoutPromise,
+        ])) as any;
         const response = await result.response;
         let rawText = response.text() || '';
 

@@ -10,6 +10,7 @@ import { buildGenerateQuestionsPrompt } from '@/lib/ai/prompts/interview.prompt'
 import { getFallbackQuestions } from '@/lib/ai/fallbacks/interview.fallback';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   try {
@@ -65,13 +66,17 @@ export async function POST(req: NextRequest) {
     let questionsResult: GenerateQuestionsResponse;
 
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '') {
+      const startTime = performance.now();
       try {
-        console.info(`[Interview] Generating questions via Gemini (${getActiveModel()}) for role: ${targetRole}`);
+        console.info(`[Interview:Start] Generating questions via Gemini (${getActiveModel()}) for role: ${targetRole}`);
         const prompt = buildGenerateQuestionsPrompt(targetRole, missingSkills, priorQuestions);
         const aiResult = await executeGeminiWithRetry(prompt, GenerateQuestionsResponseSchema);
+        const durationMs = Math.round(performance.now() - startTime);
+        console.info(`[Interview:Start] AI call completed in ${durationMs}ms`);
         questionsResult = { ...aiResult, source: 'ai' };
       } catch (aiErr: any) {
-        console.warn('[Interview] Gemini failed, using fallback questions:', aiErr?.message);
+        const durationMs = Math.round(performance.now() - startTime);
+        console.warn(`[Interview:Start] Gemini failed after ${durationMs}ms, using fallback questions:`, aiErr?.message);
         questionsResult = getFallbackQuestions(targetRole, missingSkills, priorQuestions);
       }
     } else {

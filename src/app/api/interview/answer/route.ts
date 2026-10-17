@@ -11,6 +11,7 @@ import { buildEvaluateAnswerPrompt } from '@/lib/ai/prompts/interview.prompt';
 import { evaluateAnswerFallback } from '@/lib/ai/fallbacks/interview.fallback';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   try {
@@ -48,9 +49,10 @@ export async function POST(req: NextRequest) {
     let evaluation: AnswerEvaluation;
 
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '') {
+      const startTime = performance.now();
       try {
         console.info(
-          `[Interview] Scoring answer for Q${questionIndex + 1} (${targetAnswer.questionType}) via Gemini (${getActiveModel()})`
+          `[Interview:Answer] Scoring answer for Q${questionIndex + 1} (${targetAnswer.questionType}) via Gemini (${getActiveModel()})`
         );
         const prompt = buildEvaluateAnswerPrompt(
           session.targetRole,
@@ -59,9 +61,12 @@ export async function POST(req: NextRequest) {
           userAnswer
         );
         const aiResult = await executeGeminiWithRetry(prompt, AnswerEvaluationSchema);
+        const durationMs = Math.round(performance.now() - startTime);
+        console.info(`[Interview:Answer] AI scoring completed in ${durationMs}ms`);
         evaluation = { ...aiResult, source: 'ai' };
       } catch (aiErr: any) {
-        console.warn('[Interview] Gemini scoring failed, using deterministic fallback:', aiErr?.message);
+        const durationMs = Math.round(performance.now() - startTime);
+        console.warn(`[Interview:Answer] Gemini scoring failed after ${durationMs}ms, using deterministic fallback:`, aiErr?.message);
         evaluation = evaluateAnswerFallback(
           session.targetRole,
           targetAnswer.questionType as QuestionType,

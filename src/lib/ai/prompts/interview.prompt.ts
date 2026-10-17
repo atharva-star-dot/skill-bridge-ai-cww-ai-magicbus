@@ -89,17 +89,19 @@ QUESTION:
 CANDIDATE'S SUBMITTED ANSWER:
 "${userAnswer}"
 
-RUBRIC & SCORING GUIDELINES:
+RUBRIC & STRICT SCORING GUIDELINES (EVALUATE FACTUAL CORRECTNESS, NOT TONE OR CONFIDENCE):
 - Score strictly from 1 to 10 (integer).
-- 1-3: Minimal, one-word, off-topic, or completely inaccurate answer. Provide constructive feedback on what was missing. DO NOT error out.
-- 4-5: Superficial or incomplete answer. Mentions some keywords but lacks depth, mechanism, or structure.
-- 6-7: Good solid fresher answer. Accurate fundamentals, covers main concepts, but misses edge cases, nuances, or concrete examples.
-- 8-9: Excellent answer with strong clarity, correct terminology, realistic examples (or STAR structure if behavioral), and trade-offs.
-- 10: Outstanding, exceptional mastery.
+- 1-3 (Wrong / Irrelevant / Extremely Minimal): The candidate provides factually incorrect explanations, confuses opposite concepts, answers a completely different question, or submits minimal keywords (e.g. single words, bullet lists with no explanation). Even if written with high confidence, FACTUAL ERRORS or fabricated mechanics MUST score 1 to 3.
+- 4-6 (Mediocre / Half-Correct / Incomplete): The candidate grasps the high-level idea or defines one part correctly, but is missing core mechanisms, mixes up nuances, or gives an incomplete answer lacking practical explanation.
+- 7-9 (Strong / Accurate / Nuanced): The candidate accurately explains the underlying mechanics, demonstrates correct technical knowledge (e.g. microtasks vs macrotasks, execution order, render phases), addresses edge cases, and communicates clearly.
+- 10 (Mastery): Flawless explanation covering all technical facets, execution sequence, browser implications, and practical examples.
+
+CRITICAL INSTRUCTION:
+Do NOT award points for confident tone, buzzword stuffing, or length if the core technical claim is factually false. If a candidate confidently asserts incorrect facts (for example, claiming setTimeout runs before Promise microtasks or claiming null is an unassigned variable), score it strictly between 1 and 3.
 
 EVALUATION RULES:
-1. Provide 2-3 specific "strengths" noting what was good or attempted in the candidate's answer. (If the answer was minimal, acknowledge their attempt or keyword).
-2. Provide 2-3 actionable "improvements" highlighting specific omissions, best practices, or missing technical details.
+1. Provide 2-3 specific "strengths" noting what was good or attempted in the candidate's answer. (If the answer was wrong or minimal, acknowledge the attempt or topic reference).
+2. Provide 2-3 actionable "improvements" explicitly correcting any factual errors, detailing what the accurate mechanism is.
 3. "improvedSampleAnswer": Write a realistic, highly specific model answer that directly answers the question for a fresher role.
    - For technical questions: clearly explain core concepts, code behavior, and best practices.
    - For behavioral questions: format the answer using the STAR method (Situation, Task, Action, Result).

@@ -7,6 +7,7 @@ import { generateFallbackLearningPlan } from '@/lib/ai/fallbacks/learning-plan.f
 import type { MissingSkillItem } from '@/lib/schemas/gap-detector.schema';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   try {
@@ -103,13 +104,17 @@ export async function POST(req: NextRequest) {
     let output: LearningPlanOutput;
 
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '') {
+      const startTime = performance.now();
       try {
         console.info(`[LearningPlan] Generating plan via Gemini (${getActiveModel()}) for role: ${targetRole}`);
         const prompt = buildLearningPlanPrompt(targetRole, missingSkills, matchedSkills, durationWeeks);
         const aiResult = await executeGeminiWithRetry(prompt, LearningPlanOutputSchema);
+        const durationMs = Math.round(performance.now() - startTime);
+        console.info(`[LearningPlan] AI call completed in ${durationMs}ms`);
         output = { ...aiResult, durationWeeks, source: 'ai' };
       } catch (aiError: any) {
-        console.warn('[LearningPlan] Gemini failed, using fallback:', aiError?.message);
+        const durationMs = Math.round(performance.now() - startTime);
+        console.warn(`[LearningPlan] Gemini failed after ${durationMs}ms, using fallback:`, aiError?.message);
         output = generateFallbackLearningPlan(targetRole, missingSkills, matchedSkills, durationWeeks);
       }
     } else {

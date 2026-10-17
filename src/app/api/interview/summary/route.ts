@@ -13,6 +13,7 @@ import { generateSummaryFallback } from '@/lib/ai/fallbacks/interview.fallback';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 const AISummaryResponseSchema = z.object({
   topStrengths: z.array(z.string()).min(1),
@@ -101,13 +102,17 @@ export async function POST(req: NextRequest) {
     };
 
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '') {
+      const startTime = performance.now();
       try {
-        console.info(`[Interview] Generating summary via Gemini (${getActiveModel()}) for role: ${session.targetRole}`);
+        console.info(`[Interview:Summary] Generating summary via Gemini (${getActiveModel()}) for role: ${session.targetRole}`);
         const prompt = buildSummaryPrompt(session.targetRole, perQuestionScores, missingSkills);
         const aiResult = await executeGeminiWithRetry(prompt, AISummaryResponseSchema);
+        const durationMs = Math.round(performance.now() - startTime);
+        console.info(`[Interview:Summary] AI summary completed in ${durationMs}ms`);
         summaryData = { ...aiResult, source: 'ai' };
       } catch (aiErr: any) {
-        console.warn('[Interview] Gemini summary failed, using fallback:', aiErr?.message);
+        const durationMs = Math.round(performance.now() - startTime);
+        console.warn(`[Interview:Summary] Gemini summary failed after ${durationMs}ms, using fallback:`, aiErr?.message);
         const fallback = generateSummaryFallback(session.targetRole, perQuestionScores, missingSkills);
         summaryData = {
           topStrengths: fallback.topStrengths,

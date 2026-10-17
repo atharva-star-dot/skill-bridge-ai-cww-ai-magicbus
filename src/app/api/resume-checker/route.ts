@@ -7,6 +7,7 @@ import { generateFallbackResumeReview } from '@/lib/ai/fallbacks/resume-checker.
 import { SEED_ROLES } from '@/data/seed-roles';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   try {
@@ -47,13 +48,17 @@ export async function POST(req: NextRequest) {
 
     // 3. AI analysis with fallback
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '') {
+      const startTime = performance.now();
       try {
         console.info(`[ResumeChecker] Analyzing resume via Gemini (${getActiveModel()}) for role: ${targetRole}`);
         const prompt = buildResumeCheckerPrompt(targetRole, resumeText, benchmarkSkills);
         const aiResult = await executeGeminiWithRetry(prompt, ResumeReviewOutputSchema);
+        const durationMs = Math.round(performance.now() - startTime);
+        console.info(`[ResumeChecker] AI call completed in ${durationMs}ms`);
         output = { ...aiResult, source: 'ai' };
       } catch (aiError: any) {
-        console.warn('[ResumeChecker] Gemini AI failed, using deterministic fallback:', aiError?.message);
+        const durationMs = Math.round(performance.now() - startTime);
+        console.warn(`[ResumeChecker] Gemini AI failed after ${durationMs}ms, using deterministic fallback:`, aiError?.message);
         output = generateFallbackResumeReview(targetRole, resumeText, benchmarkSkills);
       }
     } else {

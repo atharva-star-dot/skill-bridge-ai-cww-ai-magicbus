@@ -7,6 +7,7 @@ import { SEED_ROLES } from '@/data/seed-roles';
 import { hashSkills } from '@/lib/utils/role-key';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 // ─── Priority weights for readiness score ────────────────────────────────────
 // Formula: readinessScore = (Σ weight of matched skills) / (Σ weight of all required skills) × 100
@@ -107,16 +108,20 @@ export async function POST(req: NextRequest) {
 
     // ── AI path ──────────────────────────────────────────────────────────────
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '') {
+      const startTime = performance.now();
       try {
         const prompt = buildSkillGapPrompt(targetRole, currentSkills, resumeText, benchmarkSkills);
         const aiResult = await executeGeminiWithRetry(prompt, GapDetectorOutputSchema);
+        const durationMs = Math.round(performance.now() - startTime);
+        console.info(`[GapDetector] AI call completed in ${durationMs}ms`);
         output = {
           ...aiResult,
           readinessScore: computeWeightedScore(aiResult.matchedSkills, aiResult.missingSkills, aiResult.requiredSkills),
           source: 'ai',
         };
       } catch (aiError: any) {
-        console.warn('Gemini AI failed, using deterministic benchmark fallback:', aiError?.message);
+        const durationMs = Math.round(performance.now() - startTime);
+        console.warn(`[GapDetector] Gemini AI failed after ${durationMs}ms, using deterministic benchmark fallback:`, aiError?.message);
         output = generateFallbackSkillGap(targetRole, currentSkills, seedRole);
       }
     } else {
