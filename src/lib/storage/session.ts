@@ -66,11 +66,16 @@ export function saveStoredSession(session: StoredSession): void {
 
 export function updateStoredSession(partial: Partial<StoredSession>): StoredSession {
   const current = getStoredSession();
+  const isRoleChanging = partial.targetRole !== undefined && partial.targetRole !== current.targetRole;
+
   const updated: StoredSession = {
     ...current,
     ...partial,
+    // If role changed and new readinessScore wasn't explicitly provided, reset it
+    readinessScore: isRoleChanging && partial.readinessScore === undefined ? 0 : (partial.readinessScore ?? current.readinessScore),
     lastUpdated: new Date().toISOString(),
   };
+
   saveStoredSession(updated);
 
   // Asynchronously sync with backend database

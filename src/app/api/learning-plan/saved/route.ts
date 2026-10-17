@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get('sessionId');
@@ -10,21 +12,44 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Check if session has any gap report
-    const gapReport = await prisma.skillGapReport.findFirst({ where: { sessionId } });
-    if (!gapReport) {
-      return NextResponse.json({ hasGapReport: false });
+    // 1. Get current session to know the active role
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session || !session.targetRoleTitle) {
+      return NextResponse.json({ hasGapReport: false, activePlan: null }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
-    // Find latest plan with tasks
+    const currentRole = session.targetRoleTitle;
+
+    // 2. Check if a gap report exists for THIS specific active role
+    const gapReport = await prisma.skillGapReport.findFirst({
+      where: {
+        sessionId,
+        targetRole: { equals: currentRole },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!gapReport) {
+      // Role was changed but user has not run gap analysis for it yet
+      return NextResponse.json({ hasGapReport: false, activePlan: null }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    // 3. Find the latest learning plan matching THIS active role
     const savedPlan = await prisma.learningPlan.findFirst({
-      where: { sessionId },
+      where: {
+        sessionId,
+        targetRole: { equals: currentRole },
+      },
       orderBy: { createdAt: 'desc' },
       include: { tasks: { orderBy: [{ weekNumber: 'asc' }] } },
     });
 
     if (!savedPlan) {
-      return NextResponse.json({ hasGapReport: true });
+      // User has a gap report for this role, but has not built a learning plan yet
+      return NextResponse.json({ hasGapReport: true, targetRole: currentRole, activePlan: null }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
     // Group tasks by week
@@ -60,9 +85,12 @@ export async function GET(req: NextRequest) {
       weeks,
       overallGoal: '',
       source: undefined,
+      hasGapReport: true,
+    }, {
+      headers: { 'Cache-Control': 'no-store' },
     });
   } catch (err: any) {
     console.error('[SavedPlan] Error:', err);
-    return NextResponse.json({ hasGapReport: true });
+    return NextResponse.json({ hasGapReport: false }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
   }
 }

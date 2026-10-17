@@ -150,6 +150,11 @@ export default function GapDetectorPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Link href="/onboarding">
+            <Button variant="outline" size="sm" className="text-xs">
+              Change Role
+            </Button>
+          </Link>
           <Button
             variant="outline"
             size="sm"

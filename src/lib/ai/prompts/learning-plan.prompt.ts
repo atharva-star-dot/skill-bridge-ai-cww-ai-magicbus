@@ -6,7 +6,7 @@ export function buildLearningPlanPrompt(
   matchedSkills: string[],
   durationWeeks: number
 ): string {
-  // Sort: High → Medium → Low so weeks build on priority order
+  // Sort: High → Medium → Low so weeks build strictly in priority order
   const sorted = [...missingSkills].sort((a, b) => {
     const order = { High: 0, Medium: 1, Low: 2 };
     return order[a.priority] - order[b.priority];
@@ -17,7 +17,6 @@ export function buildLearningPlanPrompt(
     .join('\n');
 
   const alreadyHas = matchedSkills.length > 0 ? matchedSkills.join(', ') : 'none yet';
-  const tasksPerWeek = durationWeeks <= 2 ? 4 : durationWeeks <= 4 ? 3 : 2;
 
   return `
 You are a senior technical career mentor in India specialising in fresher and college-graduate tech placement.
@@ -29,50 +28,49 @@ ${alreadyHas}
 Missing skills to address — ordered by priority (address High-priority gaps in the first weeks):
 ${skillsBlock}
 
-PLAN DESIGN RULES:
+STRICT CURRICULUM RULES:
 1. Produce exactly ${durationWeeks} week objects.
-2. Allocate High-priority skills to the earliest weeks, Medium in the middle, Low in the last week(s).
-3. Each week must have:
-   - "weekNumber": integer (1 to ${durationWeeks})
-   - "theme": concise week title (e.g. "TypeScript Foundations")
-   - "focusSkills": 1-3 skill names from the missing skills list
-   - "tasks": array of ${tasksPerWeek}-${tasksPerWeek + 1} tasks. Each task:
-       * "title": short actionable title (e.g. "Build a typed React counter component")
-       * "description": 1-2 sentences of guidance — what to learn and how to practice
-       * "estimatedHours": realistic hours for a college student (0.5–8)
-       * "skillsCovered": which skills this task helps with
-       * "resources": 1-3 real, free resources. Each resource:
-           - "title": descriptive title
-           - "url": a real, publicly accessible URL (MDN, YouTube, official docs, freeCodeCamp, etc.)
-           - "type": one of "article", "video", "course", "docs", "practice", "book"
-   - "miniProject": a specific 1-sentence project idea that integrates the week's skills (e.g. "Build a GitHub profile card app using TypeScript and React that fetches from the GitHub API")
-4. "overallGoal": 2 sentences summarising what the candidate will be able to do after ${durationWeeks} weeks.
-5. "source" field: omit it (the API will add it).
+2. High-priority missing skills MUST be tackled in the earliest weeks (e.g. Weeks 1 and 2 in a 4-week plan).
+3. EVERY SINGLE WEEK MUST CONTAIN EXACTLY 3 TO 4 TASKS. Never return only 1 or 2 tasks in any week.
+4. Each task must have:
+   - "title": short actionable title (e.g. "Build a typed React counter component")
+   - "description": 1-2 sentences of guidance on what to learn and build
+   - "estimatedHours": realistic hours for a college student (1 to 6)
+   - "skillsCovered": array of 1-2 skill names from the missing skills list
+   - "resources": 1-3 real, free resources (MDN, official docs, freeCodeCamp, etc.)
+       * "title": title
+       * "url": valid public URL
+       * "type": one of "article", "video", "course", "docs", "practice", "book"
+5. MINI PROJECT PLACEMENT:
+   - For weeks 1 to ${durationWeeks - 1}: miniProject is a brief weekly milestone practice component.
+   - For the FINAL week (Week ${durationWeeks}): miniProject MUST BE a comprehensive, end-to-end Capstone Portfolio Mini Project combining all skills learned across the entire ${durationWeeks}-week roadmap, ready to demo to interviewers.
+6. "overallGoal": 2 clear sentences on what the candidate will achieve.
+7. Return strictly valid JSON.
 
-Return strictly valid JSON matching this shape (no extra keys):
+Shape:
 {
   "targetRole": "${targetRole}",
   "durationWeeks": ${durationWeeks},
   "weeks": [
     {
       "weekNumber": 1,
-      "theme": "TypeScript Foundations",
-      "focusSkills": ["TypeScript"],
+      "theme": "Core Fundamentals",
+      "focusSkills": ["Skill A"],
       "tasks": [
         {
-          "title": "Set up a TypeScript project with Vite",
-          "description": "Initialise a Vite+React+TypeScript template, explore tsconfig.json, and convert one plain-JS file to TypeScript with strict mode.",
-          "estimatedHours": 2,
-          "skillsCovered": ["TypeScript"],
-          "resources": [
-            { "title": "TypeScript Handbook", "url": "https://www.typescriptlang.org/docs/handbook/intro.html", "type": "docs" }
-          ]
-        }
+          "title": "Task 1",
+          "description": "...",
+          "estimatedHours": 3,
+          "skillsCovered": ["Skill A"],
+          "resources": [{ "title": "Docs", "url": "https://developer.mozilla.org", "type": "docs" }]
+        },
+        { "title": "Task 2", "description": "...", "estimatedHours": 3, "skillsCovered": ["Skill A"], "resources": [] },
+        { "title": "Task 3", "description": "...", "estimatedHours": 3, "skillsCovered": ["Skill A"], "resources": [] }
       ],
-      "miniProject": "Build a simple typed to-do list app using React and TypeScript"
+      "miniProject": "Weekly component practice"
     }
   ],
-  "overallGoal": "After ${durationWeeks} weeks you will have hands-on project experience with all priority skills and a portfolio demonstrating your readiness for ${targetRole} positions."
+  "overallGoal": "Summary..."
 }
 `;
 }

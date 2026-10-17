@@ -22,8 +22,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const session = getStoredSession();
-    if (session && session.id) {
-      fetch(`/api/session?sessionId=${session.id}`)
+    if (session && session.sessionId) {
+      fetch(`/api/session?sessionId=${session.sessionId}`, { cache: 'no-store' })
         .then((res) => res.json())
         .then((data) => {
           if (data && !data.error) {
@@ -115,13 +115,20 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <ReadinessGauge score={sessionData.readinessScore} size="sm" showLabel={false} />
-          <Link href="/gap-detector">
-            <Button size="sm" className="gap-1.5 shadow-sm">
-              <Sparkles className="h-4 w-4" /> Run Gap Check
-            </Button>
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Link href="/onboarding">
+              <Button variant="outline" size="sm" className="text-xs">
+                Change Role
+              </Button>
+            </Link>
+            <Link href="/gap-detector">
+              <Button size="sm" className="gap-1.5 shadow-sm text-xs">
+                <Sparkles className="h-4 w-4" /> Run Gap Check
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
 

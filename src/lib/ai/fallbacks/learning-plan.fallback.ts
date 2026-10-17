@@ -1,179 +1,251 @@
 import type { MissingSkillItem } from '@/lib/schemas/gap-detector.schema';
 import type { LearningPlanOutput, WeekPlan, PlanTaskItem } from '@/lib/schemas/learning-plan.schema';
 
-// ── Per-skill task templates (specific, not generic) ─────────────────────────
-// Each skill has a bespoke task description, mini-project, and free resources.
 const SKILL_TASK_MAP: Record<
   string,
-  { task: string; description: string; hours: number; resources: { title: string; url: string; type: 'article' | 'video' | 'course' | 'docs' | 'practice' | 'book' }[]; miniProject: string }
+  {
+    tasks: { title: string; description: string; hours: number; resources: { title: string; url: string; type: 'article' | 'video' | 'course' | 'docs' | 'practice' | 'book' }[] }[];
+    miniProject: string;
+  }
 > = {
   TypeScript: {
-    task: 'Learn TypeScript types, interfaces, and generics',
-    description: 'Work through the official TypeScript Handbook to understand basic types, interfaces, type narrowing, and generics. Convert an existing JS project to TypeScript with strict mode enabled.',
-    hours: 4,
-    resources: [
-      { title: 'TypeScript Handbook', url: 'https://www.typescriptlang.org/docs/handbook/intro.html', type: 'docs' },
-      { title: 'TypeScript in 100 Seconds – Fireship', url: 'https://www.youtube.com/watch?v=zQnBQ4tB3ZA', type: 'video' },
+    tasks: [
+      {
+        title: 'Master TypeScript Types & Interfaces',
+        description: 'Study primitives, type aliases, interfaces, and union types. Understand when to use interface vs type alias.',
+        hours: 3,
+        resources: [
+          { title: 'TypeScript Handbook', url: 'https://www.typescriptlang.org/docs/handbook/intro.html', type: 'docs' },
+          { title: 'TypeScript in 100 Seconds', url: 'https://www.youtube.com/watch?v=zQnBQ4tB3ZA', type: 'video' },
+        ],
+      },
+      {
+        title: 'Practice Generics & Type Narrowing',
+        description: 'Write generic functions, generic interfaces, and use type guards (typeof, instanceof, user-defined) safely.',
+        hours: 3,
+        resources: [
+          { title: 'Generics Guide', url: 'https://www.typescriptlang.org/docs/handbook/2/generics.html', type: 'docs' },
+        ],
+      },
+      {
+        title: 'Type React Components & Hooks',
+        description: 'Define props interfaces, type useState and useRef hooks, and handle React synthetic events in TypeScript.',
+        hours: 2,
+        resources: [
+          { title: 'React TypeScript Cheatsheet', url: 'https://react-typescript-cheatsheet.netlify.app/', type: 'docs' },
+        ],
+      },
     ],
-    miniProject: 'Build a typed quiz app in React+TypeScript that stores scores in localStorage',
-  },
-  'Tailwind CSS': {
-    task: 'Build a responsive layout with Tailwind CSS utility classes',
-    description: 'Install Tailwind in a React project, learn the spacing/flex/grid utilities, and rebuild a UI card design using only Tailwind classes without writing any custom CSS.',
-    hours: 3,
-    resources: [
-      { title: 'Tailwind CSS Docs', url: 'https://tailwindcss.com/docs/installation', type: 'docs' },
-      { title: 'Tailwind Crash Course – Traversy Media', url: 'https://www.youtube.com/watch?v=UBOj6rqRUME', type: 'video' },
-    ],
-    miniProject: 'Design a responsive personal portfolio card with dark-mode toggle using only Tailwind',
+    miniProject: 'Build a typed quiz application with score breakdown and typed local storage state',
   },
   Git: {
-    task: 'Master Git branching, merging, and pull requests',
-    description: 'Practise the Git workflow: create a repo, make branches, commit often, resolve a merge conflict, and open a pull request on GitHub.',
-    hours: 2,
-    resources: [
-      { title: 'Git Handbook – GitHub', url: 'https://guides.github.com/introduction/git-handbook/', type: 'docs' },
-      { title: 'Learn Git Branching (interactive)', url: 'https://learngitbranching.js.org/', type: 'practice' },
+    tasks: [
+      {
+        title: 'Git Version Control Essentials',
+        description: 'Learn initialization, staging, committing, and inspecting repository log histories.',
+        hours: 2,
+        resources: [
+          { title: 'Git Handbook – GitHub', url: 'https://guides.github.com/introduction/git-handbook/', type: 'docs' },
+        ],
+      },
+      {
+        title: 'Branching, Rebasing & Resolving Conflicts',
+        description: 'Create feature branches, perform fast-forward and 3-way merges, and resolve merge conflicts hands-on.',
+        hours: 2,
+        resources: [
+          { title: 'Learn Git Branching (interactive)', url: 'https://learngitbranching.js.org/', type: 'practice' },
+        ],
+      },
+      {
+        title: 'GitHub PR Workflow & Code Reviews',
+        description: 'Open clean Pull Requests with descriptive summaries, link issues, and review peer diffs on GitHub.',
+        hours: 2,
+        resources: [
+          { title: 'GitHub PR Documentation', url: 'https://docs.github.com/en/pull-requests', type: 'docs' },
+        ],
+      },
     ],
-    miniProject: 'Collaborate on a shared GitHub repo by branching, submitting PRs, and reviewing a peer\'s code',
-  },
-  'Git & GitHub': {
-    task: 'Master Git branching, merging, and pull requests',
-    description: 'Practise the Git workflow: create a repo, make branches, commit often, resolve a merge conflict, and open a pull request on GitHub.',
-    hours: 2,
-    resources: [
-      { title: 'Git Handbook – GitHub', url: 'https://guides.github.com/introduction/git-handbook/', type: 'docs' },
-      { title: 'Learn Git Branching (interactive)', url: 'https://learngitbranching.js.org/', type: 'practice' },
-    ],
-    miniProject: 'Collaborate on a shared GitHub repo by branching, submitting PRs, and reviewing a peer\'s code',
-  },
-  'Next.js': {
-    task: 'Build a multi-page app with Next.js App Router',
-    description: 'Create a Next.js 14+ project using the App Router, add dynamic routes, fetch data with a Server Component, and deploy a preview on Vercel.',
-    hours: 5,
-    resources: [
-      { title: 'Next.js Official Tutorial', url: 'https://nextjs.org/learn', type: 'course' },
-      { title: 'Next.js App Router in 45 minutes', url: 'https://www.youtube.com/watch?v=wm5gMKuwSYk', type: 'video' },
-    ],
-    miniProject: 'Build a blog with Next.js App Router: MDX posts, dynamic routes, and a sitemap',
+    miniProject: 'Set up an open-source workflow repo with issue templates, branch protection, and a verified PR merge',
   },
   'Redux / Zustand': {
-    task: 'Manage global state with Zustand',
-    description: 'Install Zustand, create a global store for a shopping cart, and persist it to localStorage. Compare the pattern to useState to understand why global state helps.',
-    hours: 3,
-    resources: [
-      { title: 'Zustand Docs', url: 'https://docs.pmnd.rs/zustand/getting-started/introduction', type: 'docs' },
-      { title: 'Zustand Tutorial – Jack Herrington', url: 'https://www.youtube.com/watch?v=_ngCLZ5Iz-0', type: 'video' },
+    tasks: [
+      {
+        title: 'Core State Management Concepts',
+        description: 'Understand unidirectional data flow, global vs local state, and state immutability patterns.',
+        hours: 2,
+        resources: [
+          { title: 'Zustand Docs', url: 'https://docs.pmnd.rs/zustand/getting-started/introduction', type: 'docs' },
+        ],
+      },
+      {
+        title: 'Build a Zustand Store with Selectors',
+        description: 'Create stores with actions, immutable setters, and selective re-rendering subscriptions.',
+        hours: 3,
+        resources: [
+          { title: 'Zustand Tutorial – Jack Herrington', url: 'https://www.youtube.com/watch?v=_ngCLZ5Iz-0', type: 'video' },
+        ],
+      },
+      {
+        title: 'Persist State & Async Actions',
+        description: 'Add localStorage middleware persistence and handle asynchronous API fetches inside the store.',
+        hours: 3,
+        resources: [
+          { title: 'Zustand Middleware', url: 'https://docs.pmnd.rs/zustand/integrations/persisting-store-data', type: 'docs' },
+        ],
+      },
     ],
-    miniProject: 'Build a multi-step checkout flow in React with Zustand managing cart and user state',
+    miniProject: 'Build an e-commerce shopping cart with global state, discount code logic, and local persistence',
   },
   'REST APIs': {
-    task: 'Fetch and display data from a public REST API',
-    description: 'Use the Fetch API and React\'s useEffect to load data from a public API (e.g., GitHub or Open-Meteo), handle loading and error states, and display the results.',
-    hours: 3,
-    resources: [
-      { title: 'Using Fetch – MDN', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch', type: 'docs' },
-      { title: 'REST API Crash Course – freeCodeCamp', url: 'https://www.youtube.com/watch?v=ByYqoevo9M0', type: 'video' },
+    tasks: [
+      {
+        title: 'REST Architecture & HTTP Verbs',
+        description: 'Learn REST conventions, HTTP status codes (200, 201, 400, 404, 500), and request headers.',
+        hours: 2,
+        resources: [
+          { title: 'REST API Tutorial', url: 'https://restfulapi.net/', type: 'article' },
+        ],
+      },
+      {
+        title: 'Fetch Data & Manage Loading/Error States',
+        description: 'Implement robust API fetching with AbortController for race conditions and structured error handlers.',
+        hours: 3,
+        resources: [
+          { title: 'Using Fetch – MDN', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch', type: 'docs' },
+        ],
+      },
+      {
+        title: 'Pagination & Filtering Integration',
+        description: 'Connect to a paginated public API, display query results, and implement debounced live search.',
+        hours: 3,
+        resources: [
+          { title: 'REST API Crash Course – freeCodeCamp', url: 'https://www.youtube.com/watch?v=ByYqoevo9M0', type: 'video' },
+        ],
+      },
     ],
-    miniProject: 'Build a weather dashboard that calls the Open-Meteo API and shows forecasts with charts',
+    miniProject: 'Build a live crypto or weather dashboard with search, auto-refresh, and error banner handling',
+  },
+  'Tailwind CSS': {
+    tasks: [
+      {
+        title: 'Utility-First Styling & Responsive Design',
+        description: 'Master mobile-first responsive breakpoints (sm, md, lg), spacing scales, and flex/grid layout helpers.',
+        hours: 2,
+        resources: [
+          { title: 'Tailwind CSS Docs', url: 'https://tailwindcss.com/docs/installation', type: 'docs' },
+        ],
+      },
+      {
+        title: 'Dark Mode & Custom Theme Tokens',
+        description: 'Configure custom colors and font families in tailwind.config and implement class-based dark mode toggling.',
+        hours: 3,
+        resources: [
+          { title: 'Tailwind Dark Mode', url: 'https://tailwindcss.com/docs/dark-mode', type: 'docs' },
+        ],
+      },
+      {
+        title: 'Component Patterns & Animations',
+        description: 'Build reusable modal, dropdown, and card patterns with transition and transform utilities.',
+        hours: 2,
+        resources: [
+          { title: 'Tailwind Crash Course – Traversy Media', url: 'https://www.youtube.com/watch?v=UBOj6rqRUME', type: 'video' },
+        ],
+      },
+    ],
+    miniProject: 'Design a responsive marketing landing page with interactive dark mode and custom badge components',
+  },
+  'Next.js': {
+    tasks: [
+      {
+        title: 'Next.js App Router Architecture',
+        description: 'Understand file-system routing, layout nesting, loading.tsx, error.tsx, and not-found boundaries.',
+        hours: 3,
+        resources: [
+          { title: 'Next.js Learn', url: 'https://nextjs.org/learn', type: 'course' },
+        ],
+      },
+      {
+        title: 'Server vs Client Components',
+        description: 'Learn when to use Server Components for SEO and fast streaming vs Client Components for interactivity.',
+        hours: 3,
+        resources: [
+          { title: 'Server Components Guide', url: 'https://nextjs.org/docs/app/building-your-application/rendering/server-components', type: 'docs' },
+        ],
+      },
+      {
+        title: 'Server Actions & Route Handlers',
+        description: 'Build backend API routes in app/api and mutate data directly using Next.js Server Actions.',
+        hours: 3,
+        resources: [
+          { title: 'Server Actions Tutorial', url: 'https://nextjs.org/docs/app/building-your-application/data-fetching/server-actions-and-mutations', type: 'docs' },
+        ],
+      },
+    ],
+    miniProject: 'Build a production-ready documentation or job listing portal with dynamic routing and server rendering',
   },
   'Unit Testing (Jest/Vitest)': {
-    task: 'Write unit tests with Vitest and React Testing Library',
-    description: 'Set up Vitest in a React project, write tests for a utility function and a React component, and learn the AAA (Arrange–Act–Assert) pattern.',
-    hours: 3,
-    resources: [
-      { title: 'Vitest Getting Started', url: 'https://vitest.dev/guide/', type: 'docs' },
-      { title: 'React Testing Library Tutorial', url: 'https://www.youtube.com/watch?v=7dTTFW7yACQ', type: 'video' },
+    tasks: [
+      {
+        title: 'Vitest / Jest Setup & Assertions',
+        description: 'Configure Vitest test runner, write unit tests for pure utility functions, and master test matchers.',
+        hours: 2,
+        resources: [
+          { title: 'Vitest Guide', url: 'https://vitest.dev/guide/', type: 'docs' },
+        ],
+      },
+      {
+        title: 'Testing React Components with RTL',
+        description: 'Render components, query by role/text, simulate user events (clicks, typing), and assert DOM state.',
+        hours: 3,
+        resources: [
+          { title: 'React Testing Library', url: 'https://testing-library.com/docs/react-testing-library/intro/', type: 'docs' },
+        ],
+      },
+      {
+        title: 'Mocking APIs & Custom Hooks',
+        description: 'Mock global fetch or Axios calls and write unit tests for custom React hooks.',
+        hours: 3,
+        resources: [
+          { title: 'Mock Service Worker (MSW)', url: 'https://mswjs.io/', type: 'docs' },
+        ],
+      },
     ],
-    miniProject: 'Add 80 % test coverage to a React counter and a string-utility module using Vitest',
-  },
-  'Web Accessibility (a11y)': {
-    task: 'Audit and fix accessibility issues on a web page',
-    description: 'Run axe-core or Lighthouse on a personal project, fix the top-5 WCAG 2.1 AA issues (missing alt text, colour contrast, keyboard traps), and add ARIA labels to interactive elements.',
-    hours: 2,
-    resources: [
-      { title: 'web.dev Accessibility', url: 'https://web.dev/accessibility/', type: 'article' },
-      { title: 'A11y Project Checklist', url: 'https://www.a11yproject.com/checklist/', type: 'practice' },
-    ],
-    miniProject: 'Rebuild a navigation menu to be fully keyboard-navigable and screen-reader friendly',
-  },
-  'Python (Pandas, NumPy)': {
-    task: 'Data wrangling with Pandas and NumPy on a real dataset',
-    description: 'Download a Kaggle CSV, load it with Pandas, clean missing values, compute groupby aggregations, and create a summary report.',
-    hours: 5,
-    resources: [
-      { title: 'Pandas Getting Started', url: 'https://pandas.pydata.org/docs/getting_started/index.html', type: 'docs' },
-      { title: 'Data Analysis with Python – freeCodeCamp', url: 'https://www.youtube.com/watch?v=r-uOLxNrNk8', type: 'video' },
-    ],
-    miniProject: 'Analyse the Titanic dataset: clean data, compute survival rates by class/gender, and plot results',
-  },
-  'SQL (Joins, Aggregations)': {
-    task: 'Write complex SQL queries with JOINs and window functions',
-    description: 'Solve 20 real-world SQL problems on Mode or LeetCode covering INNER/LEFT JOIN, GROUP BY, HAVING, and ROW_NUMBER window function.',
-    hours: 4,
-    resources: [
-      { title: 'SQLZoo Interactive Tutorials', url: 'https://sqlzoo.net/', type: 'practice' },
-      { title: 'SQL Tutorial – W3Schools', url: 'https://www.w3schools.com/sql/', type: 'article' },
-    ],
-    miniProject: 'Build a sales reporting query set that produces weekly revenue, top-5 products, and churn metrics',
-  },
-  'Data Visualization (PowerBI / Tableau)': {
-    task: 'Build an interactive dashboard in Power BI Desktop',
-    description: 'Download Power BI Desktop (free), connect to a CSV, create bar/line/map visuals, add slicers, and publish to Power BI Service for sharing.',
-    hours: 4,
-    resources: [
-      { title: 'Power BI Learning Path – Microsoft', url: 'https://docs.microsoft.com/en-us/learn/powerplatform/power-bi', type: 'course' },
-      { title: 'Power BI Full Course – freeCodeCamp', url: 'https://www.youtube.com/watch?v=TmhQCQr_DCA', type: 'video' },
-    ],
-    miniProject: 'Create a Covid-19 or e-commerce sales dashboard with KPI cards, trend lines, and region filters',
-  },
-  'Excel / Google Sheets': {
-    task: 'Master PivotTables, VLOOKUP, and array formulas',
-    description: 'Using a sample sales dataset, create a PivotTable, write VLOOKUP/INDEX-MATCH formulas, and use SUMIFS to produce a monthly summary table.',
-    hours: 3,
-    resources: [
-      { title: 'Excel Functions – Microsoft Support', url: 'https://support.microsoft.com/en-us/excel', type: 'docs' },
-      { title: 'Excel for Beginners – freeCodeCamp', url: 'https://www.youtube.com/watch?v=Vl0H-qTclOg', type: 'video' },
-    ],
-    miniProject: 'Build a budget tracker in Google Sheets with PivotTable summary and conditional formatting alerts',
-  },
-  Node: {
-    task: 'Build a REST API with Node.js and Express',
-    description: 'Create an Express server with CRUD routes for a resource (e.g. books), add JSON body parsing, validate inputs, and test endpoints in Postman.',
-    hours: 4,
-    resources: [
-      { title: 'Node.js Getting Started', url: 'https://nodejs.org/en/docs/guides/getting-started-guide', type: 'docs' },
-      { title: 'Express.js Crash Course', url: 'https://www.youtube.com/watch?v=L72fhGm1tfE', type: 'video' },
-    ],
-    miniProject: 'Build a notes REST API with Express + SQLite that supports create, read, update, and delete',
-  },
-  Docker: {
-    task: 'Containerise a Node.js app with Docker',
-    description: 'Write a Dockerfile for a Node.js Express app, build the image, run a container, and use docker-compose to add a database service.',
-    hours: 3,
-    resources: [
-      { title: 'Docker Getting Started', url: 'https://docs.docker.com/get-started/', type: 'docs' },
-      { title: 'Docker Tutorial for Beginners – TechWorld', url: 'https://www.youtube.com/watch?v=3c-iBn73dDE', type: 'video' },
-    ],
-    miniProject: 'Dockerise a full-stack web app and run it with docker-compose (frontend + backend + database)',
+    miniProject: 'Add 85%+ unit test coverage with Vitest and React Testing Library to an interactive form component',
   },
 };
 
-// ── Default fallback for unknown skills ──────────────────────────────────────
-function getSkillTemplate(skillName: string, targetRole: string, hours: number) {
-  return SKILL_TASK_MAP[skillName] ?? {
-    task: `Study and practise ${skillName}`,
-    description: `Research the fundamentals of ${skillName}, follow the official documentation or a beginner tutorial, and build a small demonstration project that applies what you learned.`,
-    hours,
-    resources: [
-      { title: `${skillName} Official Docs`, url: 'https://developer.mozilla.org/en-US/', type: 'docs' as const },
-      { title: `${skillName} freeCodeCamp Tutorial`, url: 'https://www.freecodecamp.org/', type: 'course' as const },
-    ],
-    miniProject: `Build a small ${targetRole} portfolio piece that demonstrates your ${skillName} ability`,
-  };
+function getTasksForSkill(skillName: string, targetRole: string): { title: string; description: string; hours: number; resources: any[] }[] {
+  // Direct match
+  if (SKILL_TASK_MAP[skillName]) return SKILL_TASK_MAP[skillName].tasks;
+  // Partial match
+  const found = Object.keys(SKILL_TASK_MAP).find(
+    (k) => skillName.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(skillName.toLowerCase())
+  );
+  if (found && SKILL_TASK_MAP[found]) return SKILL_TASK_MAP[found].tasks;
+
+  // Generic 3-task breakdown for unknown skill
+  return [
+    {
+      title: `${skillName} Foundations & Principles`,
+      description: `Study core syntax, principles, and industry conventions of ${skillName} for entry-level ${targetRole}.`,
+      hours: 3,
+      resources: [{ title: `${skillName} Documentation`, url: 'https://developer.mozilla.org/en-US/', type: 'docs' }],
+    },
+    {
+      title: `Hands-on Practice with ${skillName}`,
+      description: `Build focused code exercises applying ${skillName} in practical scenarios matching junior screening tests.`,
+      hours: 3,
+      resources: [{ title: `${skillName} Practice Guide`, url: 'https://www.freecodecamp.org/', type: 'course' }],
+    },
+    {
+      title: `Integration & Code Quality for ${skillName}`,
+      description: `Refactor code, handle edge cases, and integrate ${skillName} cleanly into a larger project structure.`,
+      hours: 2,
+      resources: [],
+    },
+  ];
 }
 
-// ── Build a specific fallback plan ───────────────────────────────────────────
 export function generateFallbackLearningPlan(
   targetRole: string,
   missingSkills: MissingSkillItem[],
@@ -186,79 +258,61 @@ export function generateFallbackLearningPlan(
     return order[a.priority] - order[b.priority];
   });
 
-  // Distribute skills across weeks
-  const skillsPerWeek = Math.ceil(sorted.length / durationWeeks);
+  const skillsPerWeek = Math.max(1, Math.ceil(sorted.length / durationWeeks));
   const weeks: WeekPlan[] = [];
 
   for (let w = 0; w < durationWeeks; w++) {
+    const isFinalWeek = w === durationWeeks - 1;
     const weekSkills = sorted.slice(w * skillsPerWeek, (w + 1) * skillsPerWeek);
-    if (weekSkills.length === 0 && w >= sorted.length) {
-      // Extra weeks when plan is longer than gap count — use review tasks
-      weeks.push({
-        weekNumber: w + 1,
-        theme: 'Portfolio & Interview Prep',
-        focusSkills: matchedSkills.slice(0, 2),
-        tasks: [
-          {
-            title: 'Polish your GitHub portfolio',
-            description: 'Write clear README files for your top 3 projects: problem solved, tech stack, setup instructions, and a screenshot or demo link.',
-            estimatedHours: 3,
-            skillsCovered: ['Portfolio', 'Communication'],
-            resources: [
-              { title: 'How to Write a Good README – freeCodeCamp', url: 'https://www.freecodecamp.org/news/how-to-write-a-good-readme-file/', type: 'article' },
-            ],
-          },
-          {
-            title: 'Practise common interview questions',
-            description: `Review the top 20 interview questions for ${targetRole} on LeetCode or InterviewBit and write out your answers.`,
-            estimatedHours: 2,
-            skillsCovered: ['Interview Prep'],
-            resources: [
-              { title: 'LeetCode', url: 'https://leetcode.com/', type: 'practice' },
-              { title: 'InterviewBit', url: 'https://www.interviewbit.com/', type: 'practice' },
-            ],
-          },
-        ],
-        miniProject: `Build and deploy a combined showcase project that uses all the skills you've learned this plan`,
-      });
-      continue;
+    const focusSkills = weekSkills.length > 0 ? weekSkills.map((s) => s.name) : [sorted[sorted.length - 1]?.name || 'Problem Solving'];
+
+    // Generate tasks (ensure 3-4 tasks per week)
+    const taskList: PlanTaskItem[] = [];
+
+    for (const skill of focusSkills) {
+      const tasks = getTasksForSkill(skill, targetRole);
+      for (const t of tasks) {
+        if (taskList.length < 3) {
+          taskList.push({
+            title: t.title,
+            description: t.description,
+            estimatedHours: t.hours,
+            skillsCovered: [skill],
+            resources: t.resources || [],
+          });
+        }
+      }
     }
 
-    const weekSkillsToUse = weekSkills.length > 0 ? weekSkills : [sorted[sorted.length - 1]];
-    const hoursPerSkill = Math.max(1, Math.round(10 / weekSkillsToUse.length));
+    // Ensure at least 3 tasks per week
+    while (taskList.length < 3) {
+      const idx = taskList.length + 1;
+      taskList.push({
+        title: `Practical Exercise ${idx}: ${focusSkills.join(' + ')}`,
+        description: `Apply your knowledge by solving realistic coding challenges related to ${focusSkills.join(', ')}.`,
+        estimatedHours: 2,
+        skillsCovered: focusSkills,
+        resources: [],
+      });
+    }
 
-    const tasks: PlanTaskItem[] = weekSkillsToUse.map((skill) => {
-      const tpl = getSkillTemplate(skill.name, targetRole, hoursPerSkill);
-      return {
-        title: tpl.task,
-        description: tpl.description,
-        estimatedHours: tpl.hours,
-        skillsCovered: [skill.name],
-        resources: tpl.resources,
-      };
-    });
+    // Cap at 4 tasks
+    const finalTasks = taskList.slice(0, 4);
 
-    // Add a practice/integration task
-    tasks.push({
-      title: `Build a mini project integrating ${weekSkillsToUse.map((s) => s.name).join(' + ')}`,
-      description: weekSkillsToUse.length === 1
-        ? getSkillTemplate(weekSkillsToUse[0].name, targetRole, 0).miniProject
-        : `Create a project that combines ${weekSkillsToUse.map((s) => s.name).join(', ')} — upload it to GitHub with a README.`,
-      estimatedHours: 3,
-      skillsCovered: weekSkillsToUse.map((s) => s.name),
-      resources: [],
-    });
+    const theme = focusSkills.length === 1
+      ? `${focusSkills[0]} Mastery`
+      : `${focusSkills[0].split(' ')[0]} & ${focusSkills[1]?.split(' ')[0] || 'Core'} Skills`;
 
-    const theme = weekSkillsToUse.length === 1
-      ? `${weekSkillsToUse[0].name} Mastery`
-      : weekSkillsToUse.map((s) => s.name.split(' ')[0]).join(' + ');
+    const miniProject = isFinalWeek
+      ? `Capstone Portfolio Project: Build and deploy a complete ${targetRole} application integrating all skills learned across the roadmap (with live URL and GitHub README).`
+      : `Weekly Milestone: Complete an interactive practice component demonstrating ${focusSkills.join(' and ')}.`;
 
     weeks.push({
       weekNumber: w + 1,
       theme,
-      focusSkills: weekSkillsToUse.map((s) => s.name),
-      tasks,
-      miniProject: getSkillTemplate(weekSkillsToUse[0].name, targetRole, 0).miniProject,
+      focusSkills,
+      tasks: finalTasks,
+      miniProject,
     });
   }
 
@@ -266,7 +320,7 @@ export function generateFallbackLearningPlan(
     targetRole,
     durationWeeks,
     weeks,
-    overallGoal: `After ${durationWeeks} weeks you will have addressed the key skill gaps for ${targetRole} and built ${Math.min(durationWeeks, sorted.length)} portfolio projects ready to show in interviews.`,
+    overallGoal: `After ${durationWeeks} weeks you will systematically close your high and medium priority skill gaps and build a deployable capstone portfolio project for ${targetRole} interviews.`,
     source: 'fallback',
   };
 }

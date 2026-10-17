@@ -6,6 +6,8 @@ import { buildLearningPlanPrompt } from '@/lib/ai/prompts/learning-plan.prompt';
 import { generateFallbackLearningPlan } from '@/lib/ai/fallbacks/learning-plan.fallback';
 import type { MissingSkillItem } from '@/lib/schemas/gap-detector.schema';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -20,15 +22,32 @@ export async function POST(req: NextRequest) {
 
     const { sessionId, durationWeeks } = validation.data;
 
-    // ── Fetch the latest SkillGapReport for this session ───────────────────
+    // 1. Fetch current session to know the ACTIVE role
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session || !session.targetRoleTitle) {
+      return NextResponse.json(
+        { error: 'No active target role found for this session. Please complete onboarding first.' },
+        { status: 404 }
+      );
+    }
+
+    const currentRole = session.targetRoleTitle;
+
+    // 2. Fetch the latest SkillGapReport specifically matching this session AND active targetRole
     const latestReport = await prisma.skillGapReport.findFirst({
-      where: { sessionId },
+      where: {
+        sessionId,
+        targetRole: { equals: currentRole },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
     if (!latestReport) {
       return NextResponse.json(
-        { error: 'No skill gap report found for this session. Please run the Skill Gap Detector first.' },
+        { error: `No skill gap report found for ${currentRole}. Please run the Skill Gap Detector first.` },
         { status: 404 }
       );
     }
@@ -38,7 +57,6 @@ export async function POST(req: NextRequest) {
     const targetRole = latestReport.targetRole;
 
     if (missingSkills.length === 0) {
-      // No gaps → create a polish/project plan
       const emptyPlan: LearningPlanOutput = {
         targetRole,
         durationWeeks,
@@ -50,21 +68,35 @@ export async function POST(req: NextRequest) {
             tasks: [
               {
                 title: 'Polish your top 3 GitHub projects',
-                description: 'Write clear README files, add demo screenshots, and ensure each project runs cleanly from a fresh clone.',
+                description: 'Write clear README files, add demo screenshots, and ensure each project runs cleanly.',
                 estimatedHours: 4,
                 skillsCovered: matchedSkills.slice(0, 2),
                 resources: [
                   { title: 'How to Write a Good README', url: 'https://www.freecodecamp.org/news/how-to-write-a-good-readme-file/', type: 'article' },
                 ],
               },
+              {
+                title: 'Build interview talking points',
+                description: 'Prepare STAR stories for each of your matched skills.',
+                estimatedHours: 3,
+                skillsCovered: matchedSkills.slice(0, 2),
+                resources: [],
+              },
+              {
+                title: 'Complete a mock code challenge',
+                description: 'Solve 2 realistic role-related coding exercises.',
+                estimatedHours: 3,
+                skillsCovered: matchedSkills.slice(0, 2),
+                resources: [],
+              },
             ],
-            miniProject: `Build and deploy a capstone project showcasing all your ${targetRole} skills with a live demo link`,
+            miniProject: `Build and deploy a capstone portfolio project showcasing your ${targetRole} capabilities`,
           },
         ],
-        overallGoal: `You already have strong skills for ${targetRole}! This plan focuses on making your portfolio shine and sharpening interview skills.`,
+        overallGoal: `You already have strong skills for ${targetRole}! This plan sharpens your portfolio and interview readiness.`,
         source: 'fallback',
       };
-      return NextResponse.json(emptyPlan, { status: 200 });
+      return NextResponse.json(emptyPlan, { status: 200, headers: { 'Cache-Control': 'no-store' } });
     }
 
     // ── AI path ─────────────────────────────────────────────────────────────
@@ -72,7 +104,7 @@ export async function POST(req: NextRequest) {
 
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '') {
       try {
-        console.info(`[LearningPlan] Using Gemini model: ${getActiveModel()}`);
+        console.info(`[LearningPlan] Generating plan via Gemini (${getActiveModel()}) for role: ${targetRole}`);
         const prompt = buildLearningPlanPrompt(targetRole, missingSkills, matchedSkills, durationWeeks);
         const aiResult = await executeGeminiWithRetry(prompt, LearningPlanOutputSchema);
         output = { ...aiResult, durationWeeks, source: 'ai' };
@@ -87,8 +119,10 @@ export async function POST(req: NextRequest) {
 
     // ── Persist to DB ────────────────────────────────────────────────────────
     try {
-      // Delete any existing plan for this session (one active plan per session)
-      await prisma.learningPlan.deleteMany({ where: { sessionId } });
+      // Delete any previous plan for THIS specific role (so re-generating gives a fresh plan)
+      await prisma.learningPlan.deleteMany({
+        where: { sessionId, targetRole },
+      });
 
       const plan = await prisma.learningPlan.create({
         data: {
@@ -131,11 +165,11 @@ export async function POST(req: NextRequest) {
             })),
           })),
         },
-        { status: 200 }
+        { status: 200, headers: { 'Cache-Control': 'no-store' } }
       );
     } catch (dbError: any) {
       console.warn('[LearningPlan] DB save failed (returning in-memory plan):', dbError?.message);
-      return NextResponse.json(output, { status: 200 });
+      return NextResponse.json(output, { status: 200, headers: { 'Cache-Control': 'no-store' } });
     }
   } catch (error: any) {
     console.error('[LearningPlan] Unexpected error:', error);

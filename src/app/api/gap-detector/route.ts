@@ -5,14 +5,14 @@ import { GapDetectorInputSchema, GapDetectorOutputSchema, GapDetectorOutput } fr
 import { buildSkillGapPrompt } from '@/lib/ai/prompts/gap-detector.prompt';
 import { SEED_ROLES } from '@/data/seed-roles';
 
+export const dynamic = 'force-dynamic';
+
 // ─── Priority weights for readiness score ────────────────────────────────────
 // Formula: readinessScore = (Σ weight of matched skills) / (Σ weight of all required skills) × 100
 // Weights: High = 3, Medium = 2, Low = 1
 // High-priority skills count 3× as much because they are dealbreakers in fresher hiring.
 const PRIORITY_WEIGHT: Record<string, number> = { High: 3, Medium: 2, Low: 1 };
 
-// ─── Per-skill reason lookup for fallback mode ───────────────────────────────
-// Each entry is a unique, role-relevant reason so no two skills share the same text.
 const SKILL_REASON_LOOKUP: Record<string, string> = {
   // Frontend
   'HTML5': 'Every frontend role requires semantic HTML5 for accessibility and SEO — it is the first thing interviewers check.',
@@ -51,7 +51,6 @@ const SKILL_REASON_LOOKUP: Record<string, string> = {
   'FastAPI or Django': 'FastAPI and Django are the two dominant Python web frameworks; employers expect proficiency in at least one.',
   'SQL (PostgreSQL)': 'Structured data querying is essential for backend developers; PostgreSQL is the most common production DB.',
   'Pydantic / Zod': 'Schema validation is critical for API correctness; Pydantic is required when working with FastAPI.',
-  'REST APIs': 'Backend engineers design and document REST APIs; this is evaluated in every technical screen.',
   'Celery / Task Queues': 'Async task processing is required in production systems; Celery expertise is a strong differentiator.',
   'Pytest': 'Unit and integration testing with Pytest is mandatory in quality-conscious Python teams.',
   'AsyncIO': 'Async programming is essential for high-throughput FastAPI services.',
@@ -71,21 +70,14 @@ const SKILL_REASON_LOOKUP: Record<string, string> = {
   'Pandas & NumPy': 'Data manipulation is the most time-consuming part of any ML project; fluency here is essential.',
   'Statistics & Probability': 'Probability and statistics are the theoretical backbone of every ML algorithm.',
   'Jupyter Notebooks': 'Notebooks are the universal environment for data exploration and presenting model results.',
-  // Default fallback reasons by category
-  _coreDefault: 'This is a core hard skill required by the majority of employers hiring for this role.',
-  _toolDefault: 'This tool or framework is widely used in the industry and frequently tested in technical screenings.',
-  _softDefault: 'This competency helps freshers integrate into teams quickly and is valued during interviews.',
 };
 
 function getSkillReason(skillName: string, isCore: boolean, targetRole: string): string {
-  // Exact match first
   if (SKILL_REASON_LOOKUP[skillName]) return SKILL_REASON_LOOKUP[skillName];
-  // Partial match (e.g. "Git & GitHub" → "Git")
   const found = Object.keys(SKILL_REASON_LOOKUP).find((k) =>
     skillName.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(skillName.toLowerCase())
   );
   if (found && SKILL_REASON_LOOKUP[found]) return SKILL_REASON_LOOKUP[found];
-  // Category fallback — unique per combination
   if (isCore) return `${skillName} is a core requirement for entry-level ${targetRole} positions; recruiters screen for it in every round.`;
   return `${skillName} is a valued differentiator that sets shortlisted ${targetRole} candidates apart from the crowd.`;
 }
@@ -112,12 +104,11 @@ export async function POST(req: NextRequest) {
 
     let output: GapDetectorOutput;
 
-    // ── AI path (server-side only — constitution principle) ────────────────────
+    // ── AI path ──────────────────────────────────────────────────────────────
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '') {
       try {
         const prompt = buildSkillGapPrompt(targetRole, currentSkills, resumeText, benchmarkSkills);
         const aiResult = await executeGeminiWithRetry(prompt, GapDetectorOutputSchema);
-        // Tag as AI-generated and apply weighted score recalculation for consistency
         output = {
           ...aiResult,
           readinessScore: computeWeightedScore(aiResult.matchedSkills, aiResult.missingSkills, aiResult.requiredSkills),
@@ -134,6 +125,7 @@ export async function POST(req: NextRequest) {
 
     // ── Persist to Database ────────────────────────────────────────────────────
     try {
+      // 1. Upsert Session with the fresh, un-boosted readiness score for this role
       await prisma.session.upsert({
         where: { id: sessionId },
         update: {
@@ -149,6 +141,7 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      // 2. Insert new SkillGapReport for this role
       await prisma.skillGapReport.create({
         data: {
           sessionId,
@@ -163,7 +156,10 @@ export async function POST(req: NextRequest) {
       console.warn('Database save warning (proceeding with response):', dbError);
     }
 
-    return NextResponse.json(output, { status: 200 });
+    return NextResponse.json(output, {
+      status: 200,
+      headers: { 'Cache-Control': 'no-store, max-age=0' },
+    });
   } catch (error: any) {
     console.error('Skill Gap Detection Error:', error);
     return NextResponse.json(
@@ -174,16 +170,12 @@ export async function POST(req: NextRequest) {
 }
 
 // ─── Weighted readiness score ─────────────────────────────────────────────────
-// Formula: readinessScore = (Σ weight[matched]) / (Σ weight[all]) × 100
-// Weights: High = 3, Medium = 2, Low = 1
-// This ensures that matching a High-priority skill lifts the score 3× more than a Low skill.
 function computeWeightedScore(
   matchedSkills: string[],
   missingSkills: GapDetectorOutput['missingSkills'],
   requiredSkills: string[]
 ): number {
   const matchedSet = new Set(matchedSkills.map((s) => s.toLowerCase()));
-  // Build a priority map from the missing skills list (matched are implicitly High weight too)
   const priorityMap = new Map<string, number>();
   for (const ms of missingSkills) {
     priorityMap.set(ms.name.toLowerCase(), PRIORITY_WEIGHT[ms.priority] ?? 2);
@@ -194,7 +186,7 @@ function computeWeightedScore(
 
   for (const skill of requiredSkills) {
     const lower = skill.toLowerCase();
-    const weight = priorityMap.get(lower) ?? PRIORITY_WEIGHT['High']; // default High if not in missing (means it was matched and is core)
+    const weight = priorityMap.get(lower) ?? PRIORITY_WEIGHT['High'];
     totalWeight += weight;
     if (matchedSet.has(lower)) matchedWeight += weight;
   }
@@ -204,7 +196,6 @@ function computeWeightedScore(
   return Math.max(10, Math.min(98, raw));
 }
 
-// ─── Fallback summary builder ─────────────────────────────────────────────────
 function buildSummary(
   matchedCount: number,
   total: number,
@@ -227,7 +218,6 @@ function buildSummary(
   return `${matchText} for ${targetRole}. Start with the ${highText} — these are dealbreakers in fresher interviews. Medium skills will further strengthen your profile.`;
 }
 
-// ─── Fallback logic (constitution principle III: fault isolation) ──────────────
 function generateFallbackSkillGap(
   targetRole: string,
   userSkills: string[],
@@ -266,8 +256,6 @@ function generateFallbackSkillGap(
 
   const highCount = missingSkills.filter((m) => m.priority === 'High').length;
   const medCount = missingSkills.filter((m) => m.priority === 'Medium').length;
-
-  // Build missingSkillsForScore: assign priority weights for scoring
   const missingWithPriority = missingSkills.map((m) => ({ ...m }));
   const readinessScore = computeWeightedScore(matchedSkills, missingWithPriority, allReq);
 

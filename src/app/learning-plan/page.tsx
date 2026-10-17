@@ -74,11 +74,11 @@ export default function LearningPlanPage() {
   useEffect(() => {
     const session = getStoredSession();
     if (!session) { setHasGapReport(false); return; }
-    setSessionId(session.id);
+    setSessionId(session.sessionId);
     setReadiness(session.readinessScore ?? null);
 
-    // Try fetching a saved plan first
-    fetch(`/api/learning-plan/saved?sessionId=${session.id}`)
+    // Try fetching a saved plan first with cache: no-store
+    fetch(`/api/learning-plan/saved?sessionId=${session.sessionId}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((data) => {
         if (data?.planId) {
@@ -87,8 +87,10 @@ export default function LearningPlanPage() {
           setHasGapReport(true);
         } else if (data?.hasGapReport === false) {
           setHasGapReport(false);
+          setPlan(null);
         } else {
           setHasGapReport(true); // has gap report but no plan yet
+          setPlan(null);
         }
       })
       .catch(() => setHasGapReport(true));
@@ -105,6 +107,7 @@ export default function LearningPlanPage() {
       const res = await fetch('/api/learning-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
         body: JSON.stringify({ sessionId, durationWeeks }),
       });
       const data = await res.json();
