@@ -30,14 +30,14 @@
 
 **Independent Test**: Navigate to `/onboarding`, select "Junior Frontend Developer", enter `HTML, CSS, JavaScript, React`, click Analyze, and verify that a 0–100 score gauge, matched skills, and High/Medium/Low missing skills with rationale are rendered within 3 seconds.
 
-- [ ] T011 [P] [US1] Create Zod validation schema for skill gap input and structured output in `src/lib/schemas/gap-detector.schema.ts`
-- [ ] T012 [P] [US1] Create AI prompt template for role skill benchmarking and gap prioritization in `src/lib/ai/prompts/gap-detector.prompt.ts`
-- [ ] T013 [US1] Implement POST route handler with Gemini JSON mode, Zod safe-parsing, and database persistence in `src/app/api/gap-detector/route.ts`
-- [ ] T014 [P] [US1] Implement interactive Skill Tag & Role Selector component with preset seed pills in `src/components/shared/SkillTagInput.tsx`
-- [ ] T015 [P] [US1] Implement animated SVG Readiness Gauge component with color tiers in `src/components/shared/ReadinessGauge.tsx`
-- [ ] T016 [US1] Implement streamlined Onboarding screen capturing target role and skills without password sign-up in `src/app/onboarding/page.tsx`
-- [ ] T017 [US1] Implement Skill Gap Detector report page displaying score, matched badges, and High/Medium/Low missing skill cards in `src/app/gap-detector/page.tsx`
-- [ ] T018 [US1] Implement guest session synchronization API route and browser localStorage helper in `src/app/api/session/route.ts` and `src/lib/storage/session.ts`
+- [x] T011 [P] [US1] Create Zod validation schema for skill gap input and structured output in `src/lib/schemas/gap-detector.schema.ts`
+- [x] T012 [P] [US1] Create AI prompt template for role skill benchmarking and gap prioritization in `src/lib/ai/prompts/gap-detector.prompt.ts`
+- [x] T013 [US1] Implement POST route handler with Gemini JSON mode, Zod safe-parsing, and database persistence in `src/app/api/gap-detector/route.ts`
+- [x] T014 [P] [US1] Implement interactive Skill Tag & Role Selector component with preset seed pills in `src/components/shared/SkillTagInput.tsx`
+- [x] T015 [P] [US1] Implement animated SVG Readiness Gauge component with color tiers in `src/components/shared/ReadinessGauge.tsx`
+- [x] T016 [US1] Implement streamlined Onboarding screen capturing target role and skills without password sign-up in `src/app/onboarding/page.tsx`
+- [x] T017 [US1] Implement Skill Gap Detector report page displaying score, matched badges, and High/Medium/Low missing skill cards in `src/app/gap-detector/page.tsx`
+- [x] T018 [US1] Implement guest session synchronization API route and browser localStorage helper in `src/app/api/session/route.ts` and `src/lib/storage/session.ts`
 
 **Checkpoint**: At this point, the core hero feature and onboarding flow are 100% operational as a viable MVP!
 
