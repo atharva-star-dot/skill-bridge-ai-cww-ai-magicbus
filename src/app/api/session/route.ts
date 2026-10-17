@@ -125,6 +125,32 @@ export async function GET(req: NextRequest) {
         }
       : null;
 
+    // Find latest completed interview strictly for THIS active role
+    const activeInterview = await prisma.interviewSession.findFirst({
+      where: {
+        sessionId,
+        targetRole: { equals: currentRole },
+        status: 'completed',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let interviewScore: number | null = null;
+    if (activeInterview?.summary) {
+      try {
+        const parsedSumm = JSON.parse(activeInterview.summary);
+        interviewScore = parsedSumm.overallScore ?? null;
+      } catch {}
+    }
+
+    const activeInterviewSummary = activeInterview
+      ? {
+          id: activeInterview.id,
+          overallScore: interviewScore,
+          createdAt: activeInterview.createdAt.toISOString(),
+        }
+      : null;
+
     return NextResponse.json({
       sessionId: session.id,
       targetRole: session.targetRoleTitle,
@@ -132,6 +158,7 @@ export async function GET(req: NextRequest) {
       readinessScore,
       activePlanSummary,
       activeResumeSummary,
+      activeInterviewSummary,
       updatedAt: session.updatedAt.toISOString(),
     }, {
       headers: { 'Cache-Control': 'no-store' },

@@ -15,11 +15,13 @@ export default function DashboardPage() {
     currentSkills: string[];
     readinessScore: number | null;
     activeResumeScore: number | null;
+    activeInterviewScore: number | null;
   }>({
     targetRole: null,
     currentSkills: [],
     readinessScore: null,
     activeResumeScore: null,
+    activeInterviewScore: null,
   });
 
   useEffect(() => {
@@ -34,6 +36,7 @@ export default function DashboardPage() {
               currentSkills: data.currentSkills || session.currentSkills,
               readinessScore: data.readinessScore ?? null,
               activeResumeScore: data.activeResumeSummary?.atsScore ?? null,
+              activeInterviewScore: data.activeInterviewSummary?.overallScore ?? null,
             });
           } else {
             setSessionData({
@@ -41,6 +44,7 @@ export default function DashboardPage() {
               currentSkills: session.currentSkills,
               readinessScore: session.readinessScore || null,
               activeResumeScore: null,
+              activeInterviewScore: null,
             });
           }
         })
@@ -50,6 +54,7 @@ export default function DashboardPage() {
             currentSkills: session.currentSkills,
             readinessScore: session.readinessScore || null,
             activeResumeScore: null,
+            activeInterviewScore: null,
           });
         });
     } else {
@@ -58,6 +63,7 @@ export default function DashboardPage() {
         currentSkills: session.currentSkills,
         readinessScore: session.readinessScore || null,
         activeResumeScore: null,
+        activeInterviewScore: null,
       });
     }
   }, []);
@@ -91,11 +97,13 @@ export default function DashboardPage() {
     },
     {
       title: 'AI Mock Interviews',
-      description: 'Practice 5 technical and behavioral interview questions with AI feedback.',
+      description: sessionData.activeInterviewScore !== null
+        ? `Latest Score: ${sessionData.activeInterviewScore}/10. Practice 5 technical and behavioral questions.`
+        : 'Practice 5 technical and behavioral interview questions with AI feedback.',
       href: '/interviews',
       icon: MessageSquare,
-      badge: 'Practice',
-      action: 'Start Interview',
+      badge: sessionData.activeInterviewScore !== null ? `Score: ${sessionData.activeInterviewScore}/10` : 'Practice',
+      action: sessionData.activeInterviewScore !== null ? 'Retake Interview' : 'Start Interview',
     },
     {
       title: 'Curated Job Matches',
