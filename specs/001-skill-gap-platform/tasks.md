@@ -81,11 +81,11 @@
 
 **Independent Test**: Start an interview, answer Question 1, verify instant score/feedback/sample answer and progression to Question 2, complete 5 questions, and verify final summary report.
 
-- [ ] T029 [P] [US5] Create Zod validation schemas for interview question generation, answer evaluation, and summary in `src/lib/schemas/interview.schema.ts`
-- [ ] T030 [P] [US5] Create AI prompt templates for role-specific interview questioning and 1–10 scoring in `src/lib/ai/prompts/interview.prompt.ts`
-- [ ] T031 [US5] Implement POST route handler for interview start, answer evaluation, and summary generation in `src/app/api/interview/route.ts`
-- [ ] T032 [P] [US5] Implement interactive interview question runner with textarea input, timer, and score cards in `src/components/features/InterviewSessionView.tsx`
-- [ ] T033 [US5] Implement Mock Interview page with 5-step progress indicator and final performance summary report in `src/app/interviews/page.tsx`
+- [x] T029 [P] [US5] Create Zod validation schemas for interview question generation, answer evaluation, and summary in `src/lib/schemas/interview.schema.ts`
+- [x] T030 [P] [US5] Create AI prompt templates for role-specific interview questioning and 1–10 scoring in `src/lib/ai/prompts/interview.prompt.ts`
+- [x] T031 [US5] Implement POST route handler for interview start, answer evaluation, and summary generation in `src/app/api/interview/route.ts`
+- [x] T032 [P] [US5] Implement interactive interview question runner with textarea input, timer, and score cards in `src/components/features/InterviewSessionView.tsx`
+- [x] T033 [US5] Implement Mock Interview page with 5-step progress indicator and final performance summary report in `src/app/interviews/page.tsx`
 
 ---
 
@@ -95,10 +95,10 @@
 
 **Independent Test**: Navigate to `/job-matches` and see ranked roles with match percentages; navigate to `/dashboard` and verify all 5 feature cards and the next recommended action card display accurately.
 
-- [ ] T034 [P] [US6] Implement GET route handler for deterministic skill matching against seed jobs in `src/app/api/jobs/route.ts`
-- [ ] T035 [P] [US6] Implement Job Match listing card displaying match percentage, matched skills, and missing skill badges in `src/components/features/JobMatchesView.tsx`
-- [ ] T036 [US6] Implement Job Matches explorer page with category and role filtering in `src/app/job-matches/page.tsx`
-- [ ] T037 [US3] Implement Central Dashboard page with composite readiness score, learning plan progress, next recommended action, and 5 tool access cards in `src/app/dashboard/page.tsx`
+- [x] T034 [P] [US6] Implement GET route handler for deterministic skill matching against seed jobs in `src/app/api/jobs/route.ts`
+- [x] T035 [P] [US6] Implement Job Match listing card displaying match percentage, matched skills, and missing skill badges in `src/components/features/JobMatchesView.tsx`
+- [x] T036 [US6] Implement Job Matches explorer page with category and role filtering in `src/app/job-matches/page.tsx`
+- [x] T037 [US3] Implement Central Dashboard page with composite readiness score, learning plan progress, next recommended action, and 5 tool access cards in `src/app/dashboard/page.tsx`
 
 ---
 
@@ -106,12 +106,12 @@
 
 **Purpose**: Ensure rock-solid resilience, accessible mobile-first responsiveness, documentation, and live public deployment.
 
-- [ ] T038 [P] Implement global error boundaries, loading skeletons, and empty state illustrations in `src/app/error.tsx` and `src/components/shared/EmptyState.tsx`
-- [ ] T039 [P] Audit and test mobile responsiveness across 375px–768px viewports with Tailwind classes
-- [ ] T040 [P] Verify fault isolation: simulate artificial AI failures and verify non-blocking graceful degradation in `src/components/shared/ErrorAlert.tsx`
-- [ ] T041 Complete comprehensive project documentation, architecture diagram, and Windows PowerShell setup guide in `README.md`
-- [ ] T042 Run quickstart manual verification scenarios (all 5 under 60 seconds) per `specs/001-skill-gap-platform/quickstart.md`
-- [ ] T043 Configure Vercel deployment configuration (`vercel.json` / build scripts) and deploy to live working URL
+- [x] T038 [P] Implement global error boundaries, loading skeletons, and empty state illustrations in `src/app/error.tsx` and `src/components/shared/EmptyState.tsx`
+- [x] T039 [P] Audit and test mobile responsiveness across 375px–768px viewports with Tailwind classes
+- [x] T040 [P] Verify fault isolation: simulate artificial AI failures and verify non-blocking graceful degradation in `src/components/shared/ErrorAlert.tsx`
+- [x] T041 Complete comprehensive project documentation, architecture diagram, and Windows PowerShell setup guide in `README.md`
+- [x] T042 Run quickstart manual verification scenarios (all 5 under 60 seconds) per `specs/001-skill-gap-platform/quickstart.md`
+- [x] T043 Configure Vercel deployment configuration (`vercel.json` / build scripts) and deploy to live working URL
 
 ---
 
