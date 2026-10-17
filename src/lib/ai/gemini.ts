@@ -1,8 +1,16 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ZodSchema } from 'zod';
 
-// Models confirmed working via probe-gemini.ts for this API key (best→fallback order)
-const CANDIDATE_MODELS = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'];
+// Primary model is controlled by GEMINI_MODEL env var.
+// Default: gemini-2.5-flash (confirmed working — see scripts/probe-gemini.ts).
+// Fallback chain: try the configured primary, then the backup candidates.
+const PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const BACKUP_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'];
+const CANDIDATE_MODELS = [PRIMARY_MODEL, ...BACKUP_MODELS.filter((m) => m !== PRIMARY_MODEL)];
+
+export function getActiveModel(): string {
+  return PRIMARY_MODEL;
+}
 
 export async function executeGeminiWithRetry<T>(
   prompt: string,
@@ -24,7 +32,7 @@ export async function executeGeminiWithRetry<T>(
       model: modelName,
       systemInstruction:
         systemInstruction ||
-        'You are an expert technical career coach and skills analyzer. Always return strictly valid JSON matching the schema requested.',
+        'You are an expert technical career coach. Always return strictly valid JSON matching the schema requested.',
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.2,
@@ -39,39 +47,41 @@ export async function executeGeminiWithRetry<T>(
 
         // Strip potential markdown code fences: ```json ... ```
         rawText = rawText.trim();
-        if (rawText.startsWith('```json')) {
-          rawText = rawText.slice(7);
-        } else if (rawText.startsWith('```')) {
-          rawText = rawText.slice(3);
-        }
-        if (rawText.endsWith('```')) {
-          rawText = rawText.slice(0, -3);
-        }
+        if (rawText.startsWith('```json')) rawText = rawText.slice(7);
+        else if (rawText.startsWith('```')) rawText = rawText.slice(3);
+        if (rawText.endsWith('```')) rawText = rawText.slice(0, -3);
         rawText = rawText.trim();
 
         const parsedJson = JSON.parse(rawText);
         const validationResult = schema.safeParse(parsedJson);
 
         if (!validationResult.success) {
-          console.error('Zod Validation Failure:', validationResult.error.format());
-          throw new Error(`AI generated JSON does not match expected schema: ${validationResult.error.message}`);
+          console.error(`[Gemini] Zod validation failed (${modelName}):`, validationResult.error.format());
+          throw new Error(`AI JSON does not match schema: ${validationResult.error.message}`);
         }
 
+        console.info(`[Gemini] ✓ Success with model: ${modelName} (attempt ${attempt + 1})`);
         return validationResult.data;
       } catch (err: any) {
         lastError = err;
         const errorMessage = err?.message || '';
-        const isNotFound = err?.status === 404 || errorMessage.includes('404') || errorMessage.includes('not found');
-        const isRateLimit = err?.status === 429 || errorMessage.includes('429') || errorMessage.includes('ResourceExhausted');
-        const isTransient = err?.status >= 500 || errorMessage.includes('fetch failed') || errorMessage.includes('overloaded');
+        const isNotFound =
+          err?.status === 404 ||
+          errorMessage.includes('404') ||
+          errorMessage.toLowerCase().includes('not found') ||
+          errorMessage.toLowerCase().includes('no longer available');
+        const isRateLimit =
+          err?.status === 429 || errorMessage.includes('429') || errorMessage.includes('ResourceExhausted');
+        const isTransient =
+          err?.status >= 500 || errorMessage.includes('fetch failed') || errorMessage.includes('overloaded');
 
         if (isNotFound) {
-          // Model name not found on this API key/region, break to try next candidate model
-          break;
+          console.warn(`[Gemini] Model ${modelName} not available, trying next candidate…`);
+          break; // try next candidate model
         }
 
         if ((isRateLimit || isTransient) && attempt < maxRetries - 1) {
-          console.warn(`Model ${modelName} attempt ${attempt + 1} failed (${errorMessage}). Retrying in ${delays[attempt]}ms...`);
+          console.warn(`[Gemini] ${modelName} attempt ${attempt + 1} transient error. Retrying in ${delays[attempt]}ms…`);
           await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
           continue;
         }
@@ -80,5 +90,5 @@ export async function executeGeminiWithRetry<T>(
     }
   }
 
-  throw new Error(`Gemini AI execution failed across candidate models: ${(lastError as Error)?.message}`);
+  throw new Error(`Gemini AI execution failed across all candidate models: ${(lastError as Error)?.message}`);
 }

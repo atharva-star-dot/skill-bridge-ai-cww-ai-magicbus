@@ -316,13 +316,26 @@ export default function GapDetectorPage() {
 
               {/* Next Action One-Click Transition */}
               <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
-                <Link href="/learning-plan" className="w-full sm:w-auto flex-1">
-                  <Button size="default" className="w-full gap-2 shadow-sm">
-                    <BookOpen className="h-4 w-4" />
-                    Generate 4-Week Learning Plan (1-Click)
-                    <ArrowRight className="h-4 w-4 ml-auto" />
-                  </Button>
-                </Link>
+                <Button
+                  size="default"
+                  className="w-full sm:flex-1 gap-2 shadow-sm"
+                  onClick={async () => {
+                    const session = getStoredSession();
+                    // Pre-trigger plan generation then navigate so the page loads with data
+                    try {
+                      await fetch('/api/learning-plan', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sessionId: session.sessionId, durationWeeks: 4 }),
+                      });
+                    } catch {}
+                    router.push('/learning-plan');
+                  }}
+                >
+                  <BookOpen className="h-4 w-4" />
+                  Build My Learning Plan
+                  <ArrowRight className="h-4 w-4 ml-auto" />
+                </Button>
                 <Link href="/resume-checker" className="w-full sm:w-auto">
                   <Button variant="outline" size="default" className="w-full gap-2 text-xs">
                     <FileText className="h-4 w-4" />

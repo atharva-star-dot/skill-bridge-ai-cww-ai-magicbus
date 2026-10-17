@@ -49,11 +49,11 @@
 
 **Independent Test**: Click "Generate Learning Plan" from a gap report, toggle task checkboxes, and verify the progress bar updates and increments the composite readiness score.
 
-- [ ] T019 [P] [US2] Create Zod validation schema for weekly curriculum, tasks, and resources in `src/lib/schemas/learning-plan.schema.ts`
-- [ ] T020 [P] [US2] Create AI prompt template for personalized 2/4/8-week milestone curriculum in `src/lib/ai/prompts/learning-plan.prompt.ts`
-- [ ] T021 [US2] Implement POST route handler for learning plan generation and task persistence in `src/app/api/learning-plan/route.ts`
-- [ ] T022 [P] [US2] Implement interactive week-by-week timeline component with task checkboxes, resource links, and mini-project cards in `src/components/features/LearningRoadmapView.tsx`
-- [ ] T023 [US2] Implement Personal Learning Plan page with duration selector (2, 4, 8 weeks), progress bar, and dynamic score recalculation in `src/app/learning-plan/page.tsx`
+- [x] T019 [P] [US2] Create Zod validation schema for weekly curriculum, tasks, and resources in `src/lib/schemas/learning-plan.schema.ts`
+- [x] T020 [P] [US2] Create AI prompt template for personalized 2/4/8-week milestone curriculum in `src/lib/ai/prompts/learning-plan.prompt.ts`
+- [x] T021 [US2] Implement POST route handler for learning plan generation and task persistence in `src/app/api/learning-plan/route.ts`
+- [x] T022 [P] [US2] Implement interactive week-by-week timeline component with task checkboxes, resource links, and mini-project cards in `src/components/features/LearningRoadmapView.tsx`
+- [x] T023 [US2] Implement Personal Learning Plan page with duration selector (2, 4, 8 weeks), progress bar, and dynamic score recalculation in `src/app/learning-plan/page.tsx`
 
 **Checkpoint**: Users can now diagnose gaps and generate a step-by-step roadmap to close them.
 

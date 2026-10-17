@@ -22,11 +22,38 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const session = getStoredSession();
-    setSessionData({
-      targetRole: session.targetRole || 'Junior Frontend Developer',
-      currentSkills: session.currentSkills,
-      readinessScore: session.readinessScore || 65,
-    });
+    if (session && session.id) {
+      fetch(`/api/session?sessionId=${session.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && !data.error) {
+            setSessionData({
+              targetRole: data.targetRole || session.targetRole || 'Junior Frontend Developer',
+              currentSkills: data.currentSkills || session.currentSkills,
+              readinessScore: data.readinessScore ?? session.readinessScore ?? 65,
+            });
+          } else {
+            setSessionData({
+              targetRole: session.targetRole || 'Junior Frontend Developer',
+              currentSkills: session.currentSkills,
+              readinessScore: session.readinessScore || 65,
+            });
+          }
+        })
+        .catch(() => {
+          setSessionData({
+            targetRole: session.targetRole || 'Junior Frontend Developer',
+            currentSkills: session.currentSkills,
+            readinessScore: session.readinessScore || 65,
+          });
+        });
+    } else {
+      setSessionData({
+        targetRole: session.targetRole || 'Junior Frontend Developer',
+        currentSkills: session.currentSkills,
+        readinessScore: session.readinessScore || 65,
+      });
+    }
   }, []);
 
   const featureCards = [
