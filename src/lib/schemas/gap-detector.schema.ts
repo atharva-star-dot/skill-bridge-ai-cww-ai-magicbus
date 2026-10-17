@@ -22,6 +22,8 @@ export const GapDetectorOutputSchema = z.object({
   missingSkills: z.array(MissingSkillItemSchema),
   extractedResumeSkills: z.array(z.string()).optional(),
   summary: z.string().min(10, 'Diagnostic summary is required'),
+  /** Which analysis path ran: "ai" = Gemini API, "fallback" = rule-based benchmark */
+  source: z.enum(['ai', 'fallback']).optional(),
 });
 
 export type MissingSkillItem = z.infer<typeof MissingSkillItemSchema>;

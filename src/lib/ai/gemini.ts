@@ -1,7 +1,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ZodSchema } from 'zod';
 
-const CANDIDATE_MODELS = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+// Models confirmed working via probe-gemini.ts for this API key (best→fallback order)
+const CANDIDATE_MODELS = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'];
 
 export async function executeGeminiWithRetry<T>(
   prompt: string,
