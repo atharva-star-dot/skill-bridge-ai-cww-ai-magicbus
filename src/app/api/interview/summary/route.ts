@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createClient } from '@/lib/supabase/server';
 import { executeGeminiWithRetry, getActiveModel } from '@/lib/ai/gemini';
 import {
   GenerateSummaryInputSchema,
-  InterviewSummarySchema,
   InterviewSummary,
   QuestionType,
   PerQuestionScoreItem,
@@ -29,6 +29,18 @@ const AISummaryResponseSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = user.id;
+
     const body = await req.json();
     const validation = GenerateSummaryInputSchema.safeParse(body);
     if (!validation.success) {
@@ -38,7 +50,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { sessionId, interviewSessionId } = validation.data;
+    const { interviewSessionId } = validation.data;
 
     const session = await prisma.interviewSession.findUnique({
       where: { id: interviewSessionId },
@@ -49,7 +61,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    if (!session || session.sessionId !== sessionId) {
+    if (!session || session.userId !== userId) {
       return NextResponse.json({ error: 'Interview session not found or invalid' }, { status: 404 });
     }
 
@@ -59,7 +71,9 @@ export async function POST(req: NextRequest) {
       try {
         if (a.feedback) {
           const f = JSON.parse(a.feedback);
-          parsedFeedback = Array.isArray(f.improvements) ? f.improvements.join('; ') : String(a.feedback);
+          parsedFeedback = Array.isArray(f.improvements)
+            ? f.improvements.join('; ')
+            : String(a.feedback);
         }
       } catch {
         parsedFeedback = a.feedback || '';
@@ -78,13 +92,14 @@ export async function POST(req: NextRequest) {
 
     // 1. Calculate overallScore strictly in code (average of question scores)
     const totalScore = perQuestionScores.reduce((acc, q) => acc + q.score, 0);
-    const overallScore = Math.round((totalScore / Math.max(1, perQuestionScores.length)) * 10) / 10;
+    const overallScore =
+      Math.round((totalScore / Math.max(1, perQuestionScores.length)) * 10) / 10;
 
     // 2. Fetch missing skills from gap report for recommendations
     let missingSkills: string[] = [];
     try {
       const gapReport = await prisma.skillGapReport.findFirst({
-        where: { sessionId, targetRole: { equals: session.targetRole } },
+        where: { userId, targetRole: { equals: session.targetRole } },
         orderBy: { createdAt: 'desc' },
       });
       if (gapReport?.missingSkills) {
@@ -104,7 +119,9 @@ export async function POST(req: NextRequest) {
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '') {
       const startTime = performance.now();
       try {
-        console.info(`[Interview:Summary] Generating summary via Gemini (${getActiveModel()}) for role: ${session.targetRole}`);
+        console.info(
+          `[Interview:Summary] Generating summary via Gemini (${getActiveModel()}) for role: ${session.targetRole}`
+        );
         const prompt = buildSummaryPrompt(session.targetRole, perQuestionScores, missingSkills);
         const aiResult = await executeGeminiWithRetry(prompt, AISummaryResponseSchema);
         const durationMs = Math.round(performance.now() - startTime);
@@ -112,8 +129,15 @@ export async function POST(req: NextRequest) {
         summaryData = { ...aiResult, source: 'ai' };
       } catch (aiErr: any) {
         const durationMs = Math.round(performance.now() - startTime);
-        console.warn(`[Interview:Summary] Gemini summary failed after ${durationMs}ms, using fallback:`, aiErr?.message);
-        const fallback = generateSummaryFallback(session.targetRole, perQuestionScores, missingSkills);
+        console.warn(
+          `[Interview:Summary] Gemini summary failed after ${durationMs}ms, using fallback:`,
+          aiErr?.message
+        );
+        const fallback = generateSummaryFallback(
+          session.targetRole,
+          perQuestionScores,
+          missingSkills
+        );
         summaryData = {
           topStrengths: fallback.topStrengths,
           topWeaknesses: fallback.topWeaknesses,
@@ -123,7 +147,11 @@ export async function POST(req: NextRequest) {
       }
     } else {
       console.info('[Interview] No GEMINI_API_KEY — using fallback summary.');
-      const fallback = generateSummaryFallback(session.targetRole, perQuestionScores, missingSkills);
+      const fallback = generateSummaryFallback(
+        session.targetRole,
+        perQuestionScores,
+        missingSkills
+      );
       summaryData = {
         topStrengths: fallback.topStrengths,
         topWeaknesses: fallback.topWeaknesses,
@@ -150,14 +178,20 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      summary: finalSummary,
-    }, {
-      headers: { 'Cache-Control': 'no-store' },
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        summary: finalSummary,
+      },
+      {
+        headers: { 'Cache-Control': 'no-store' },
+      }
+    );
   } catch (err: any) {
     console.error('[Interview] Summary POST error:', err);
-    return NextResponse.json({ error: 'Failed to generate interview summary' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to generate interview summary' },
+      { status: 500 }
+    );
   }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createClient } from '@/lib/supabase/server';
 import { executeGeminiWithRetry, getActiveModel } from '@/lib/ai/gemini';
 import {
   StartInterviewInputSchema,
@@ -14,6 +15,18 @@ export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = user.id;
+
     const body = await req.json();
     const validation = StartInterviewInputSchema.safeParse(body);
     if (!validation.success) {
@@ -23,15 +36,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { sessionId, targetRole } = validation.data;
+    const { targetRole } = validation.data;
 
-    // Ensure session exists in DB (guest session handling)
-    await prisma.session.upsert({
-      where: { id: sessionId },
-      update: { targetRoleTitle: targetRole },
+    // Ensure profile exists in DB
+    await prisma.profile.upsert({
+      where: { id: userId },
+      update: { targetRole },
       create: {
-        id: sessionId,
-        targetRoleTitle: targetRole,
+        id: userId,
+        email: user.email,
+        fullName: user.user_metadata?.full_name || null,
+        targetRole,
         currentSkills: '[]',
         readinessScore: 0,
       },
@@ -41,7 +56,7 @@ export async function POST(req: NextRequest) {
     let missingSkills: string[] = [];
     try {
       const gapReport = await prisma.skillGapReport.findFirst({
-        where: { sessionId, targetRole: { equals: targetRole } },
+        where: { userId, targetRole: { equals: targetRole } },
         orderBy: { createdAt: 'desc' },
       });
       if (gapReport?.missingSkills) {
@@ -54,7 +69,7 @@ export async function POST(req: NextRequest) {
     const priorAnswers = await prisma.interviewAnswer.findMany({
       where: {
         interviewSession: {
-          sessionId,
+          userId,
           targetRole: { equals: targetRole },
         },
       },
@@ -68,7 +83,9 @@ export async function POST(req: NextRequest) {
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '') {
       const startTime = performance.now();
       try {
-        console.info(`[Interview:Start] Generating questions via Gemini (${getActiveModel()}) for role: ${targetRole}`);
+        console.info(
+          `[Interview:Start] Generating questions via Gemini (${getActiveModel()}) for role: ${targetRole}`
+        );
         const prompt = buildGenerateQuestionsPrompt(targetRole, missingSkills, priorQuestions);
         const aiResult = await executeGeminiWithRetry(prompt, GenerateQuestionsResponseSchema);
         const durationMs = Math.round(performance.now() - startTime);
@@ -76,7 +93,10 @@ export async function POST(req: NextRequest) {
         questionsResult = { ...aiResult, source: 'ai' };
       } catch (aiErr: any) {
         const durationMs = Math.round(performance.now() - startTime);
-        console.warn(`[Interview:Start] Gemini failed after ${durationMs}ms, using fallback questions:`, aiErr?.message);
+        console.warn(
+          `[Interview:Start] Gemini failed after ${durationMs}ms, using fallback questions:`,
+          aiErr?.message
+        );
         questionsResult = getFallbackQuestions(targetRole, missingSkills, priorQuestions);
       }
     } else {
@@ -87,7 +107,7 @@ export async function POST(req: NextRequest) {
     // 4. Create InterviewSession and pre-create the 5 InterviewAnswer slots
     const interviewSession = await prisma.interviewSession.create({
       data: {
-        sessionId,
+        userId,
         targetRole,
         status: 'in_progress',
         currentQuestionIndex: 0,
@@ -106,28 +126,31 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      interviewSession: {
-        id: interviewSession.id,
-        targetRole: interviewSession.targetRole,
-        status: interviewSession.status,
-        currentQuestionIndex: interviewSession.currentQuestionIndex,
-        questions: interviewSession.answers.map((a) => ({
-          id: a.id,
-          questionIndex: a.questionIndex,
-          questionType: a.questionType,
-          questionText: a.questionText,
-          userAnswer: a.userAnswer,
-          score: a.score,
-          feedback: a.feedback,
-          sampleAnswer: a.sampleAnswer,
-        })),
-        source: questionsResult.source,
+    return NextResponse.json(
+      {
+        success: true,
+        interviewSession: {
+          id: interviewSession.id,
+          targetRole: interviewSession.targetRole,
+          status: interviewSession.status,
+          currentQuestionIndex: interviewSession.currentQuestionIndex,
+          questions: interviewSession.answers.map((a) => ({
+            id: a.id,
+            questionIndex: a.questionIndex,
+            questionType: a.questionType,
+            questionText: a.questionText,
+            userAnswer: a.userAnswer,
+            score: a.score,
+            feedback: a.feedback,
+            sampleAnswer: a.sampleAnswer,
+          })),
+          source: questionsResult.source,
+        },
       },
-    }, {
-      headers: { 'Cache-Control': 'no-store' },
-    });
+      {
+        headers: { 'Cache-Control': 'no-store' },
+      }
+    );
   } catch (err: any) {
     console.error('[Interview] Start POST error:', err);
     return NextResponse.json({ error: 'Failed to start interview session' }, { status: 500 });

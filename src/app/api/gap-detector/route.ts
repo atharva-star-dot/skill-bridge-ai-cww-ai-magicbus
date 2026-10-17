@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createClient } from '@/lib/supabase/server';
 import { executeGeminiWithRetry } from '@/lib/ai/gemini';
 import { GapDetectorInputSchema, GapDetectorOutputSchema, GapDetectorOutput } from '@/lib/schemas/gap-detector.schema';
 import { buildSkillGapPrompt } from '@/lib/ai/prompts/gap-detector.prompt';
@@ -86,6 +87,18 @@ function getSkillReason(skillName: string, isCore: boolean, targetRole: string):
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = user.id;
+
     const body = await req.json();
     const validation = GapDetectorInputSchema.safeParse(body);
 
@@ -96,7 +109,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { sessionId, targetRole, currentSkills, resumeText } = validation.data;
+    const { targetRole, currentSkills, resumeText } = validation.data;
 
     // Check if target role matches a seed role to grab benchmark skills
     const seedRole = SEED_ROLES.find(
@@ -131,17 +144,19 @@ export async function POST(req: NextRequest) {
 
     // ── Persist to Database ────────────────────────────────────────────────────
     try {
-      // 1. Upsert Session with the fresh, un-boosted readiness score for this role
-      await prisma.session.upsert({
-        where: { id: sessionId },
+      // 1. Upsert Profile with the fresh, un-boosted readiness score for this role
+      await prisma.profile.upsert({
+        where: { id: userId },
         update: {
-          targetRoleTitle: targetRole,
+          targetRole,
           currentSkills: JSON.stringify(currentSkills),
           readinessScore: output.readinessScore,
         },
         create: {
-          id: sessionId,
-          targetRoleTitle: targetRole,
+          id: userId,
+          email: user.email,
+          fullName: user.user_metadata?.full_name || null,
+          targetRole,
           currentSkills: JSON.stringify(currentSkills),
           readinessScore: output.readinessScore,
         },
@@ -151,7 +166,7 @@ export async function POST(req: NextRequest) {
       const sHash = hashSkills(currentSkills);
       await prisma.skillGapReport.create({
         data: {
-          sessionId,
+          userId,
           targetRole,
           skillsHash: sHash,
           readinessScore: output.readinessScore,

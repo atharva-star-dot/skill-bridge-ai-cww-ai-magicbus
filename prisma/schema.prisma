@@ -1,144 +1,158 @@
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
   provider = "prisma-client-js"
 }
 
-model Session {
-  id               String            @id @default(uuid())
-  targetRoleId     String?
-  targetRoleTitle  String?
-  currentSkills    String            @default("[]") // JSON string of string[]
-  readinessScore   Int               @default(0)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+model Profile {
+  id             String    @id @db.Uuid
+  email          String?
+  fullName       String?   @map("full_name")
+  targetRole     String?   @map("target_role")
+  currentSkills  String    @default("[]") @map("current_skills")
+  readinessScore Int?      @map("readiness_score")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at")
 
-  targetRole       TargetRole?       @relation(fields: [targetRoleId], references: [id])
-  gapReports       SkillGapReport[]
-  learningPlans    LearningPlan[]
-  resumeReviews    ResumeReview[]
+  gapReports        SkillGapReport[]
+  learningPlans     LearningPlan[]
+  resumeReviews     ResumeReview[]
   interviewSessions InterviewSession[]
 
-  @@index([id])
+  @@map("profiles")
 }
 
 model TargetRole {
-  id                String    @id @default(uuid())
-  slug              String    @unique
-  title             String
-  category          String    // "Engineering", "Data & AI", "Design", "Product & QA"
-  description       String
-  requiredSkills    String    // JSON string of string[]
-  goodToHaveSkills  String    // JSON string of string[]
-  createdAt         DateTime  @default(now())
+  id               String   @id @default(uuid()) @db.Uuid
+  slug             String   @unique
+  title            String
+  category         String   // "Engineering", "Data & AI", "Design", "Product & QA"
+  description      String
+  requiredSkills   String   @map("required_skills")   // JSON string of string[]
+  goodToHaveSkills String   @map("good_to_have_skills") // JSON string of string[]
+  createdAt        DateTime @default(now()) @map("created_at")
 
-  sessions          Session[]
+  @@map("target_roles")
 }
 
 model SkillGapReport {
-  id              String    @id @default(uuid())
-  sessionId       String
-  targetRole      String
-  skillsHash      String?   // Hash of normalized currentSkills when report was generated
-  readinessScore  Int
-  matchedSkills   String    // JSON string of string[]
-  missingSkills   String    // JSON string of MissingSkillItem[]
-  summary         String
-  createdAt       DateTime  @default(now())
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  targetRole     String   @map("target_role")
+  skillsHash     String?  @map("skills_hash")
+  readinessScore Int      @map("readiness_score")
+  matchedSkills  String   @map("matched_skills") // JSON string of string[]
+  missingSkills  String   @map("missing_skills") // JSON string of MissingSkillItem[]
+  summary        String
+  createdAt      DateTime @default(now()) @map("created_at")
 
-  session         Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  profile        Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId])
+  @@index([userId])
+  @@index([userId, targetRole])
+  @@map("skill_gap_reports")
 }
 
 model LearningPlan {
-  id                   String     @id @default(uuid())
-  sessionId            String
-  targetRole           String
-  durationWeeks        Int        @default(4)
-  completionPercentage Int        @default(0)
-  createdAt            DateTime   @default(now())
+  id                   String     @id @default(uuid()) @db.Uuid
+  userId               String     @map("user_id") @db.Uuid
+  targetRole           String     @map("target_role")
+  durationWeeks        Int        @default(4) @map("duration_weeks")
+  completionPercentage Int        @default(0) @map("completion_percentage")
+  createdAt            DateTime   @default(now()) @map("created_at")
 
-  session              Session    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  profile              Profile    @relation(fields: [userId], references: [id], onDelete: Cascade)
   tasks                PlanTask[]
 
-  @@index([sessionId])
+  @@index([userId])
+  @@index([userId, targetRole])
+  @@map("learning_plans")
 }
 
 model PlanTask {
-  id             String       @id @default(uuid())
-  planId         String
-  weekNumber     Int
+  id             String       @id @default(uuid()) @db.Uuid
+  planId         String       @map("plan_id") @db.Uuid
+  weekNumber     Int          @map("week_number")
   title          String
   description    String
-  estimatedHours Float
-  isCompleted    Boolean      @default(false)
+  estimatedHours Float        @map("estimated_hours")
+  isCompleted    Boolean      @default(false) @map("is_completed")
   resources      String       @default("[]") // JSON string of LearningResource[]
 
   plan           LearningPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@index([planId, weekNumber])
+  @@map("plan_tasks")
 }
 
 model ResumeReview {
-  id              String    @id @default(uuid())
-  sessionId       String
-  targetRole      String
-  atsScore        Int
-  strengths       String    // JSON string of string[]
-  weaknesses      String    // JSON string of string[]
-  missingKeywords String    // JSON string of string[]
-  bulletRewrites  String    // JSON string of BulletRewriteItem[] (exactly 5 items)
-  createdAt       DateTime  @default(now())
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  targetRole      String   @map("target_role")
+  resumeText      String?  @map("resume_text")
+  atsScore        Int      @map("ats_score")
+  strengths       String   // JSON string of string[]
+  weaknesses      String   // JSON string of string[]
+  missingKeywords String   @map("missing_keywords") // JSON string of string[]
+  bulletRewrites  String   @map("bullet_rewrites") // JSON string of BulletRewriteItem[]
+  createdAt       DateTime @default(now()) @map("created_at")
 
-  session         Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  profile         Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId])
+  @@index([userId])
+  @@index([userId, targetRole])
+  @@map("resume_reviews")
 }
 
 model InterviewSession {
-  id                   String            @id @default(uuid())
-  sessionId            String
-  targetRole           String
+  id                   String            @id @default(uuid()) @db.Uuid
+  userId               String            @map("user_id") @db.Uuid
+  targetRole           String            @map("target_role")
   status               String            @default("in_progress") // "in_progress", "completed"
-  currentQuestionIndex Int               @default(0)
+  currentQuestionIndex Int               @default(0) @map("current_question_index")
   summary              String?           // JSON string of InterviewSummary
-  createdAt            DateTime          @default(now())
+  createdAt            DateTime          @default(now()) @map("created_at")
 
-  session              Session           @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  profile              Profile           @relation(fields: [userId], references: [id], onDelete: Cascade)
   answers              InterviewAnswer[]
 
-  @@index([sessionId])
+  @@index([userId])
+  @@index([userId, targetRole])
+  @@map("interview_sessions")
 }
 
 model InterviewAnswer {
-  id                 String           @id @default(uuid())
-  interviewSessionId String
-  questionIndex      Int
-  questionType       String           // "technical", "behavioral"
-  questionText       String
-  userAnswer         String?
+  id                 String           @id @default(uuid()) @db.Uuid
+  interviewSessionId String           @map("interview_session_id") @db.Uuid
+  questionIndex      Int              @map("question_index")
+  questionType       String           @map("question_type") // "technical", "behavioral", "scenario"
+  questionText       String           @map("question_text")
+  userAnswer         String?          @map("user_answer")
   score              Int?             // 1 to 10
   feedback           String?
-  sampleAnswer       String?
-  createdAt          DateTime         @default(now())
+  sampleAnswer       String?          @map("sample_answer")
+  createdAt          DateTime         @default(now()) @map("created_at")
 
   interviewSession   InterviewSession @relation(fields: [interviewSessionId], references: [id], onDelete: Cascade)
 
   @@index([interviewSessionId, questionIndex])
+  @@map("interview_answers")
 }
 
 model JobRole {
-  id              String   @id @default(uuid())
+  id              String   @id @default(uuid()) @db.Uuid
   title           String
   company         String
   location        String
-  experienceLevel String   // "Fresher (0-1 yrs)", "Internship", "1-2 yrs"
-  salaryRange     String   // e.g. "₹4.5 - ₹6 LPA"
+  experienceLevel String   @map("experience_level") // "Fresher (0-1 yrs)", "Internship", "1-2 yrs"
+  salaryRange     String   @map("salary_range")     // e.g. "₹4.5 - ₹6 LPA"
   skills          String   // JSON string of string[]
-  applyUrl        String
-  createdAt       DateTime @default(now())
+  applyUrl        String   @map("apply_url")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("job_roles")
 }

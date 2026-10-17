@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createClient } from '@/lib/supabase/server';
 import { executeGeminiWithRetry, getActiveModel } from '@/lib/ai/gemini';
 import { LearningPlanInputSchema, LearningPlanOutputSchema, LearningPlanOutput } from '@/lib/schemas/learning-plan.schema';
 import { buildLearningPlanPrompt } from '@/lib/ai/prompts/learning-plan.prompt';
@@ -11,6 +12,18 @@ export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = user.id;
+
     const body = await req.json();
     const validation = LearningPlanInputSchema.safeParse(body);
 
@@ -21,26 +34,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { sessionId, durationWeeks } = validation.data;
+    const { durationWeeks } = validation.data;
 
-    // 1. Fetch current session to know the ACTIVE role
-    const session = await prisma.session.findUnique({
-      where: { id: sessionId },
+    // 1. Fetch current profile to know the ACTIVE role
+    const profile = await prisma.profile.findUnique({
+      where: { id: userId },
     });
 
-    if (!session || !session.targetRoleTitle) {
+    if (!profile || !profile.targetRole) {
       return NextResponse.json(
-        { error: 'No active target role found for this session. Please complete onboarding first.' },
+        { error: 'No active target role found for this user. Please complete onboarding first.' },
         { status: 404 }
       );
     }
 
-    const currentRole = session.targetRoleTitle;
+    const currentRole = profile.targetRole;
 
-    // 2. Fetch the latest SkillGapReport specifically matching this session AND active targetRole
+    // 2. Fetch the latest SkillGapReport specifically matching this user AND active targetRole
     const latestReport = await prisma.skillGapReport.findFirst({
       where: {
-        sessionId,
+        userId,
         targetRole: { equals: currentRole },
       },
       orderBy: { createdAt: 'desc' },
@@ -126,12 +139,12 @@ export async function POST(req: NextRequest) {
     try {
       // Delete any previous plan for THIS specific role (so re-generating gives a fresh plan)
       await prisma.learningPlan.deleteMany({
-        where: { sessionId, targetRole },
+        where: { userId, targetRole },
       });
 
       const plan = await prisma.learningPlan.create({
         data: {
-          sessionId,
+          userId,
           targetRole,
           durationWeeks,
           completionPercentage: 0,

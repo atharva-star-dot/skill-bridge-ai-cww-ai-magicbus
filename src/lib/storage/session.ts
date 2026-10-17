@@ -1,96 +1,92 @@
 export interface StoredSession {
-  sessionId: string;
+  userId?: string;
+  sessionId?: string; // backwards compatibility alias for userId
   targetRole: string | null;
   targetRoleId?: string | null;
   currentSkills: string[];
-  readinessScore: number;
-  lastUpdated: string;
+  readinessScore: number | null;
+  activeResumeScore?: number | null;
+  activeInterviewScore?: number | null;
+  activePlanSummary?: any;
+  updatedAt?: string;
 }
 
-const STORAGE_KEY = 'skill_bridge_session_v1';
-
-function generateUUID(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
-export function getStoredSession(): StoredSession {
-  if (typeof window === 'undefined') {
-    return {
-      sessionId: 'server-session',
-      targetRole: null,
-      currentSkills: [],
-      readinessScore: 0,
-      lastUpdated: new Date().toISOString(),
-    };
-  }
-
+/**
+ * Fetches user profile session from server via secure HTTP-only cookies.
+ */
+export async function fetchSession(): Promise<StoredSession | null> {
+  if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed.sessionId) {
-        return parsed;
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to read session from localStorage:', e);
+    const res = await fetch('/api/session', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      userId: data.userId,
+      sessionId: data.userId,
+      targetRole: data.targetRole || null,
+      currentSkills: data.currentSkills || [],
+      readinessScore: data.readinessScore ?? null,
+      activeResumeScore: data.activeResumeSummary?.atsScore ?? null,
+      activeInterviewScore: data.activeInterviewSummary?.overallScore ?? null,
+      activePlanSummary: data.activePlanSummary || null,
+      updatedAt: data.updatedAt,
+    };
+  } catch {
+    return null;
   }
+}
 
-  const newSession: StoredSession = {
-    sessionId: generateUUID(),
+/**
+ * Updates user profile session on the server.
+ */
+export async function updateSession(data: {
+  targetRole?: string;
+  currentSkills?: string[];
+  readinessScore?: number;
+}): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const res = await fetch('/api/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Compatibility fallback functions for synchronous callers
+ */
+export function getStoredSession(): StoredSession {
+  return {
+    userId: '',
+    sessionId: '',
     targetRole: null,
     currentSkills: [],
     readinessScore: 0,
-    lastUpdated: new Date().toISOString(),
   };
-
-  saveStoredSession(newSession);
-  return newSession;
-}
-
-export function saveStoredSession(session: StoredSession): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-  } catch (e) {
-    console.warn('Failed to write session to localStorage:', e);
-  }
 }
 
 export function updateStoredSession(partial: Partial<StoredSession>): StoredSession {
-  const current = getStoredSession();
-  const isRoleChanging = partial.targetRole !== undefined && partial.targetRole !== current.targetRole;
-
-  const updated: StoredSession = {
-    ...current,
-    ...partial,
-    // If role changed and new readinessScore wasn't explicitly provided, reset it
-    readinessScore: isRoleChanging && partial.readinessScore === undefined ? 0 : (partial.readinessScore ?? current.readinessScore),
-    lastUpdated: new Date().toISOString(),
-  };
-
-  saveStoredSession(updated);
-
-  // Asynchronously sync with backend database
   if (typeof window !== 'undefined') {
     fetch('/api/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        sessionId: updated.sessionId,
-        targetRole: updated.targetRole || undefined,
-        currentSkills: updated.currentSkills,
-        readinessScore: updated.readinessScore,
+        targetRole: partial.targetRole || undefined,
+        currentSkills: partial.currentSkills,
+        readinessScore: partial.readinessScore,
       }),
-    }).catch((err) => console.warn('Background session sync warning:', err));
+    }).catch(() => {});
   }
-
-  return updated;
+  return {
+    userId: '',
+    sessionId: '',
+    targetRole: partial.targetRole || null,
+    currentSkills: partial.currentSkills || [],
+    readinessScore: partial.readinessScore ?? 0,
+  };
 }

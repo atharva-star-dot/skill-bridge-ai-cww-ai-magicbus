@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createClient } from '@/lib/supabase/server';
 import { executeGeminiWithRetry, getActiveModel } from '@/lib/ai/gemini';
 import {
   SubmitAnswerInputSchema,
@@ -15,6 +16,18 @@ export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = user.id;
+
     const body = await req.json();
     const validation = SubmitAnswerInputSchema.safeParse(body);
     if (!validation.success) {
@@ -24,9 +37,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { sessionId, interviewSessionId, questionIndex, userAnswer } = validation.data;
+    const { interviewSessionId, questionIndex, userAnswer } = validation.data;
 
-    // 1. Verify session exists and is active
+    // 1. Verify session exists and belongs to this user
     const session = await prisma.interviewSession.findUnique({
       where: { id: interviewSessionId },
       include: {
@@ -36,7 +49,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    if (!session || session.sessionId !== sessionId) {
+    if (!session || session.userId !== userId) {
       return NextResponse.json({ error: 'Interview session not found or invalid' }, { status: 404 });
     }
 
@@ -66,7 +79,10 @@ export async function POST(req: NextRequest) {
         evaluation = { ...aiResult, source: 'ai' };
       } catch (aiErr: any) {
         const durationMs = Math.round(performance.now() - startTime);
-        console.warn(`[Interview:Answer] Gemini scoring failed after ${durationMs}ms, using deterministic fallback:`, aiErr?.message);
+        console.warn(
+          `[Interview:Answer] Gemini scoring failed after ${durationMs}ms, using deterministic fallback:`,
+          aiErr?.message
+        );
         evaluation = evaluateAnswerFallback(
           session.targetRole,
           targetAnswer.questionType as QuestionType,
@@ -112,20 +128,23 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      evaluation: {
-        score: evaluation.score,
-        strengths: evaluation.strengths,
-        improvements: evaluation.improvements,
-        improvedSampleAnswer: evaluation.improvedSampleAnswer,
-        source: evaluation.source,
+    return NextResponse.json(
+      {
+        success: true,
+        evaluation: {
+          score: evaluation.score,
+          strengths: evaluation.strengths,
+          improvements: evaluation.improvements,
+          improvedSampleAnswer: evaluation.improvedSampleAnswer,
+          source: evaluation.source,
+        },
+        nextQuestionIndex,
+        isCompleted,
       },
-      nextQuestionIndex,
-      isCompleted,
-    }, {
-      headers: { 'Cache-Control': 'no-store' },
-    });
+      {
+        headers: { 'Cache-Control': 'no-store' },
+      }
+    );
   } catch (err: any) {
     console.error('[Interview] Answer POST error:', err);
     return NextResponse.json({ error: 'Failed to evaluate answer' }, { status: 500 });

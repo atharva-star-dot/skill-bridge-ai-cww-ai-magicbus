@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { Sparkles, Github, Heart } from 'lucide-react';
+import { Sparkles, Heart } from 'lucide-react';
 
 export function Footer() {
   return (

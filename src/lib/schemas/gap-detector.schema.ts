@@ -8,7 +8,8 @@ export const MissingSkillItemSchema = z.object({
 });
 
 export const GapDetectorInputSchema = z.object({
-  sessionId: z.string().min(1, 'Session ID is required'),
+  sessionId: z.string().optional(),
+  userId: z.string().optional(),
   targetRole: z.string().min(2, 'Target role must be at least 2 characters').max(100),
   currentSkills: z.array(z.string()),
   resumeText: z.string().max(25000).optional(),

@@ -2,13 +2,12 @@
 
 import React, { useState } from 'react';
 import { X, Plus, Sparkles } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 interface SkillTagInputProps {
   skills: string[];
-  onChange: (skills: string[]) => void;
+  onChange: (_skills: string[]) => void;
   suggestedSkills?: string[];
   placeholder?: string;
 }

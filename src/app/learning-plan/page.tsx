@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { getStoredSession } from '@/lib/storage/session';
 
 // ── Types (mirror API response) ───────────────────────────────────────────────
 interface Resource {
@@ -68,17 +67,19 @@ export default function LearningPlanPage() {
   const [progress, setProgress] = useState(0);
   const [readiness, setReadiness] = useState<number | null>(null);
   const [togglingTaskId, setTogglingTaskId] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-
   // ── Bootstrap: check session + gap report ────────────────────────────────
   useEffect(() => {
-    const session = getStoredSession();
-    if (!session) { setHasGapReport(false); return; }
-    setSessionId(session.sessionId);
-    setReadiness(session.readinessScore ?? null);
+    fetch('/api/session', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => {
+        if (s?.readinessScore !== undefined) {
+          setReadiness(s.readinessScore);
+        }
+      })
+      .catch(() => {});
 
     // Try fetching a saved plan first with cache: no-store
-    fetch(`/api/learning-plan/saved?sessionId=${session.sessionId}`, { cache: 'no-store' })
+    fetch('/api/learning-plan/saved', { cache: 'no-store' })
       .then((r) => r.json())
       .then((data) => {
         if (data?.planId) {
@@ -98,7 +99,6 @@ export default function LearningPlanPage() {
 
   // ── Generate plan ────────────────────────────────────────────────────────
   const generatePlan = useCallback(async () => {
-    if (!sessionId) return;
     setLoading(true);
     setError(null);
     setPlan(null);
@@ -108,7 +108,7 @@ export default function LearningPlanPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ sessionId, durationWeeks }),
+        body: JSON.stringify({ durationWeeks }),
       });
       const data = await res.json();
 
@@ -129,12 +129,12 @@ export default function LearningPlanPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, durationWeeks]);
+  }, [durationWeeks]);
 
   // ── Toggle task checkbox ─────────────────────────────────────────────────
   const toggleTask = useCallback(
     async (weekIdx: number, taskIdx: number) => {
-      if (!plan || !sessionId) return;
+      if (!plan) return;
       const week = plan.weeks[weekIdx];
       const task = week.tasks[taskIdx];
       if (!task.taskId) return;
@@ -168,7 +168,7 @@ export default function LearningPlanPage() {
         const res = await fetch(`/api/learning-plan/task/${task.taskId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ isCompleted: newCompleted, sessionId }),
+          body: JSON.stringify({ isCompleted: newCompleted }),
         });
         const data = await res.json();
         if (data?.completionPercentage !== undefined) setProgress(data.completionPercentage);
@@ -182,7 +182,7 @@ export default function LearningPlanPage() {
         setTogglingTaskId(null);
       }
     },
-    [plan, sessionId, progress]
+    [plan, progress]
   );
 
   // ── Toggle week accordion ────────────────────────────────────────────────

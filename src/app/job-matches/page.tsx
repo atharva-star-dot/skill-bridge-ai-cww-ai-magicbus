@@ -2,11 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Briefcase, ArrowLeft, Sparkles } from 'lucide-react';
+import { Briefcase, ArrowLeft } from 'lucide-react';
 import { JobMatchesView } from '@/components/features/JobMatchesView';
 import { Button } from '@/components/ui/button';
-import { SEED_JOBS, SeedJob } from '@/data/seed-jobs';
-import { getStoredSession } from '@/lib/storage/session';
+import { SEED_JOBS } from '@/data/seed-jobs';
 
 export default function JobMatchesPage() {
   const [userSkills, setUserSkills] = useState<string[]>([]);
@@ -14,10 +13,14 @@ export default function JobMatchesPage() {
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   useEffect(() => {
-    const session = getStoredSession();
-    if (session.currentSkills && session.currentSkills.length > 0) {
-      setUserSkills(session.currentSkills);
-    }
+    fetch('/api/session', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((session) => {
+        if (session?.currentSkills && session.currentSkills.length > 0) {
+          setUserSkills(session.currentSkills);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const normalizedUserSkills = userSkills.map((s) => s.toLowerCase().trim());

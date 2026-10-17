@@ -5,29 +5,25 @@ export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/health
- * Health check endpoint for deployment monitoring.
- * Returns 200 with DB connectivity status and timestamp.
+ * Public health check returning boolean flags only for database and gemini.
  */
 export async function GET() {
-  const start = performance.now();
-  let dbOk = false;
+  let database = false;
 
   try {
     await prisma.$queryRaw`SELECT 1`;
-    dbOk = true;
+    database = true;
   } catch {
-    // DB unreachable
+    database = false;
   }
 
-  const latencyMs = Math.round(performance.now() - start);
+  const gemini = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '');
 
   return NextResponse.json(
     {
-      status: dbOk ? 'ok' : 'degraded',
-      timestamp: new Date().toISOString(),
-      db: dbOk ? 'connected' : 'unreachable',
-      dbLatencyMs: latencyMs,
+      database,
+      gemini,
     },
-    { status: dbOk ? 200 : 503 }
+    { status: database ? 200 : 503 }
   );
 }

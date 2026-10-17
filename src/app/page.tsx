@@ -7,7 +7,6 @@ import {
   MessageSquare,
   Briefcase,
   ArrowRight,
-  CheckCircle2,
   Sparkles,
   Zap,
   ShieldCheck,
@@ -86,14 +85,14 @@ export default function HomePage() {
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/onboarding" className="w-full sm:w-auto">
+            <Link href="/signup" className="w-full sm:w-auto">
               <Button size="lg" className="w-full sm:w-auto gap-2 text-base px-8 py-6 shadow-md">
-                Get Started Free <ArrowRight className="h-5 w-5" />
+                Sign Up Free <ArrowRight className="h-5 w-5" />
               </Button>
             </Link>
-            <Link href="/job-matches" className="w-full sm:w-auto">
+            <Link href="/login" className="w-full sm:w-auto">
               <Button size="lg" variant="outline" className="w-full sm:w-auto text-base px-8 py-6">
-                Explore 40+ Entry Roles
+                Log In
               </Button>
             </Link>
           </div>
@@ -106,7 +105,7 @@ export default function HomePage() {
             </div>
             <div className="flex items-center gap-2.5 p-3 rounded-lg bg-card border text-xs sm:text-sm">
               <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
-              <span>Zero Complex Sign-ups</span>
+              <span>Secure Cloud Profile</span>
             </div>
             <div className="flex items-center gap-2.5 p-3 rounded-lg bg-card border text-xs sm:text-sm col-span-2 sm:col-span-1">
               <TrendingUp className="h-4 w-4 text-purple-500 shrink-0" />

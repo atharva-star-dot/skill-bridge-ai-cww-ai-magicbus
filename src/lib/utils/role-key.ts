@@ -13,8 +13,8 @@ export function hashSkills(skills: string[]): string {
   return createHash('sha256').update(normalized).digest('hex').slice(0, 12);
 }
 
-export function computeRoleKey(sessionId: string, targetRole: string, skills: string[]): string {
+export function computeRoleKey(userId: string, targetRole: string, skills: string[]): string {
   const normRole = targetRole.trim().toLowerCase();
   const sHash = hashSkills(skills);
-  return `${sessionId}:${normRole}:${sHash}`;
+  return `${userId}:${normRole}:${sHash}`;
 }

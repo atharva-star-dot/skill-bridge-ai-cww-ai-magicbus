@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
-  MessageSquare,
   Sparkles,
   CheckCircle2,
   AlertCircle,
@@ -21,7 +20,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { getStoredSession } from '@/lib/storage/session';
 import { InterviewSummary, QuestionType } from '@/lib/schemas/interview.schema';
 
 interface QuestionState {
@@ -37,7 +35,6 @@ interface QuestionState {
 
 export default function InterviewsPage() {
   const [targetRole, setTargetRole] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [interviewSessionId, setInterviewSessionId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<QuestionState[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -66,22 +63,23 @@ export default function InterviewsPage() {
 
   // 1. Initial Load & Session Recovery (handles refresh mid-session)
   useEffect(() => {
-    const session = getStoredSession();
-    if (!session || !session.sessionId) {
-      setStatus('idle');
-      return;
-    }
+    fetch('/api/session', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((session) => {
+        const role = session?.targetRole || 'Junior Frontend Developer';
+        setTargetRole(role);
 
-    setSessionId(session.sessionId);
-    const role = session.targetRole || 'Junior Frontend Developer';
-    setTargetRole(role);
-
-    // Fetch active/in-progress interview for this role
-    fetch(`/api/interview/active?sessionId=${session.sessionId}&role=${encodeURIComponent(role)}`, {
-      cache: 'no-store',
-    })
-      .then((res) => res.json())
+        // Fetch active/in-progress interview for this role
+        return fetch(`/api/interview/active?role=${encodeURIComponent(role)}`, {
+          cache: 'no-store',
+        });
+      })
+      .then((res) => res?.json())
       .then((data) => {
+        if (!data) {
+          setStatus('idle');
+          return;
+        }
         if (data.activeSession) {
           // Resume in-progress session
           const s = data.activeSession;
@@ -122,7 +120,7 @@ export default function InterviewsPage() {
 
   // Start fresh interview
   const handleStartInterview = async () => {
-    if (!sessionId || !targetRole) return;
+    if (!targetRole) return;
     setStatus('loading');
     setErrorMessage(null);
     setLastEvaluation(null);
@@ -134,7 +132,7 @@ export default function InterviewsPage() {
       const res = await fetch('/api/interview/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, targetRole }),
+        body: JSON.stringify({ targetRole }),
       });
 
       const data = await res.json();
@@ -155,7 +153,7 @@ export default function InterviewsPage() {
 
   // Submit current answer
   const handleSubmitAnswer = async () => {
-    if (!sessionId || !interviewSessionId) return;
+    if (!interviewSessionId) return;
     if (answerText.trim().length === 0) return;
 
     setIsEvaluating(true);
@@ -166,7 +164,6 @@ export default function InterviewsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId,
           interviewSessionId,
           questionIndex: currentIndex,
           userAnswer: answerText,
@@ -220,7 +217,7 @@ export default function InterviewsPage() {
 
   // Generate final performance summary
   const handleGenerateSummary = async () => {
-    if (!sessionId || !interviewSessionId) return;
+    if (!interviewSessionId) return;
     setIsGeneratingSummary(true);
     setStatus('loading');
 
@@ -229,7 +226,6 @@ export default function InterviewsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId,
           interviewSessionId,
         }),
       });
@@ -526,7 +522,7 @@ export default function InterviewsPage() {
                       </Button>
                     </div>
                     <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed italic bg-muted/30 p-3 rounded-lg border">
-                      "{lastEvaluation.improvedSampleAnswer}"
+                      &ldquo;{lastEvaluation.improvedSampleAnswer}&rdquo;
                     </p>
                   </div>
 

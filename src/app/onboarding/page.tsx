@@ -2,14 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Target, Sparkles, FileText, ArrowRight, Check, Search } from 'lucide-react';
+import { ArrowRight, Check, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { SkillTagInput } from '@/components/shared/SkillTagInput';
 import { SEED_ROLES, SeedRole } from '@/data/seed-roles';
-import { getStoredSession, updateStoredSession } from '@/lib/storage/session';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -23,22 +22,29 @@ export default function OnboardingPage() {
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Load existing session if any
+  // Load existing profile if any
   useEffect(() => {
-    const session = getStoredSession();
-    if (session.targetRole) {
-      const match = SEED_ROLES.find((r) => r.title.toLowerCase() === session.targetRole?.toLowerCase());
-      if (match) {
-        setSelectedRole(match.title);
-        setIsCustomRole(false);
-      } else {
-        setCustomRoleInput(session.targetRole);
-        setIsCustomRole(true);
-      }
-    }
-    if (session.currentSkills && session.currentSkills.length > 0) {
-      setSkills(session.currentSkills);
-    }
+    fetch('/api/session', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        if (data.targetRole) {
+          const match = SEED_ROLES.find(
+            (r) => r.title.toLowerCase() === data.targetRole?.toLowerCase()
+          );
+          if (match) {
+            setSelectedRole(match.title);
+            setIsCustomRole(false);
+          } else {
+            setCustomRoleInput(data.targetRole);
+            setIsCustomRole(true);
+          }
+        }
+        if (data.currentSkills && data.currentSkills.length > 0) {
+          setSkills(data.currentSkills);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const activeRoleData = SEED_ROLES.find((r) => r.title === selectedRole);
@@ -62,7 +68,7 @@ export default function OnboardingPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
@@ -82,11 +88,17 @@ export default function OnboardingPage() {
       return;
     }
 
-    // Save to guest session
-    updateStoredSession({
-      targetRole: targetRoleToSave,
-      currentSkills: skills,
-    });
+    // Save to user profile via server route
+    try {
+      await fetch('/api/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetRole: targetRoleToSave,
+          currentSkills: skills,
+        }),
+      });
+    } catch {}
 
     // Store resume text in sessionStorage for immediate gap analysis
     if (inputMode === 'resume' && resumeText.trim()) {

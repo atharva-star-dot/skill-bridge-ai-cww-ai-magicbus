@@ -54,18 +54,21 @@ export type InterviewSummary = z.infer<typeof InterviewSummarySchema>;
 
 // Route inputs
 export const StartInterviewInputSchema = z.object({
-  sessionId: z.string().min(1, 'sessionId is required'),
+  sessionId: z.string().optional(),
+  userId: z.string().optional(),
   targetRole: z.string().min(2, 'targetRole is required'),
 });
 
 export const SubmitAnswerInputSchema = z.object({
-  sessionId: z.string().min(1, 'sessionId is required'),
+  sessionId: z.string().optional(),
+  userId: z.string().optional(),
   interviewSessionId: z.string().min(1, 'interviewSessionId is required'),
   questionIndex: z.number().int().min(0).max(4),
   userAnswer: z.string().min(1, 'Answer is required').max(3000, 'Answer cannot exceed 3,000 characters'),
 });
 
 export const GenerateSummaryInputSchema = z.object({
-  sessionId: z.string().min(1, 'sessionId is required'),
+  sessionId: z.string().optional(),
+  userId: z.string().optional(),
   interviewSessionId: z.string().min(1, 'interviewSessionId is required'),
 });

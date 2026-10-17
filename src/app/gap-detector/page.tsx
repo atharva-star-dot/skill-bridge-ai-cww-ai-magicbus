@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import confetti from 'canvas-confetti';
 import {
   Target,
-  Sparkles,
   ArrowRight,
   AlertTriangle,
   CheckCircle2,
@@ -14,16 +13,13 @@ import {
   RefreshCw,
   BookOpen,
   FileText,
-  Filter,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ReadinessGauge } from '@/components/shared/ReadinessGauge';
 import { SkillTagInput } from '@/components/shared/SkillTagInput';
-import { GapDetectorOutput, MissingSkillItem } from '@/lib/schemas/gap-detector.schema';
-import { getStoredSession, updateStoredSession } from '@/lib/storage/session';
-import { SEED_ROLES } from '@/data/seed-roles';
+import { GapDetectorOutput } from '@/lib/schemas/gap-detector.schema';
 
 export default function GapDetectorPage() {
   const router = useRouter();
@@ -36,40 +32,40 @@ export default function GapDetectorPage() {
   const [priorityFilter, setPriorityFilter] = useState<'All' | 'High' | 'Medium' | 'Low'>('All');
   const [isEditingInputs, setIsEditingInputs] = useState<boolean>(false);
 
-  // Auto-run on load if session has data or pending resume
+  // Auto-run on load if profile has data or pending resume
   useEffect(() => {
-    const session = getStoredSession();
     const pendingResume = sessionStorage.getItem('pending_resume_text');
-
-    if (session.targetRole) {
-      setTargetRole(session.targetRole);
-    }
-    if (session.currentSkills && session.currentSkills.length > 0) {
-      setSkills(session.currentSkills);
-    }
     if (pendingResume) {
       setResumeText(pendingResume);
       sessionStorage.removeItem('pending_resume_text');
     }
 
-    // Auto-trigger analysis if we have a role and skills/resume
-    const roleToRun = session.targetRole || 'Junior Frontend Developer';
-    const skillsToRun = session.currentSkills?.length ? session.currentSkills : ['HTML5', 'CSS3', 'JavaScript', 'React'];
-    runAnalysis(roleToRun, skillsToRun, pendingResume || undefined);
+    fetch('/api/session', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const roleToRun = data?.targetRole || 'Junior Frontend Developer';
+        const skillsToRun = data?.currentSkills?.length
+          ? data.currentSkills
+          : ['HTML5', 'CSS3', 'JavaScript', 'React'];
+
+        setTargetRole(roleToRun);
+        setSkills(skillsToRun);
+        runAnalysis(roleToRun, skillsToRun, pendingResume || undefined);
+      })
+      .catch(() => {
+        runAnalysis('Junior Frontend Developer', ['HTML5', 'CSS3', 'JavaScript', 'React'], pendingResume || undefined);
+      });
   }, []);
 
   const runAnalysis = async (role: string, currentSkills: string[], resume?: string) => {
     setIsLoading(true);
     setErrorMsg(null);
 
-    const session = getStoredSession();
-
     try {
       const res = await fetch('/api/gap-detector', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId: session.sessionId,
           targetRole: role,
           currentSkills: currentSkills,
           resumeText: resume || undefined,
@@ -84,13 +80,6 @@ export default function GapDetectorPage() {
       const data: GapDetectorOutput = await res.json();
       setReport(data);
       setIsEditingInputs(false);
-
-      // Update local storage session
-      updateStoredSession({
-        targetRole: role,
-        currentSkills,
-        readinessScore: data.readinessScore,
-      });
 
       // Fire confetti if score is competitive
       if (data.readinessScore >= 70) {
@@ -130,8 +119,6 @@ export default function GapDetectorPage() {
   });
 
   const highPriorityCount = report?.missingSkills.filter((s) => s.priority === 'High').length || 0;
-  const mediumPriorityCount = report?.missingSkills.filter((s) => s.priority === 'Medium').length || 0;
-  const lowPriorityCount = report?.missingSkills.filter((s) => s.priority === 'Low').length || 0;
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
@@ -325,13 +312,11 @@ export default function GapDetectorPage() {
                   size="default"
                   className="w-full sm:flex-1 gap-2 shadow-sm"
                   onClick={async () => {
-                    const session = getStoredSession();
-                    // Pre-trigger plan generation then navigate so the page loads with data
                     try {
                       await fetch('/api/learning-plan', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ sessionId: session.sessionId, durationWeeks: 4 }),
+                        body: JSON.stringify({ durationWeeks: 4 }),
                       });
                     } catch {}
                     router.push('/learning-plan');

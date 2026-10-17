@@ -2,12 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Target, BookOpen, FileText, MessageSquare, Briefcase, ArrowRight, Sparkles } from 'lucide-react';
+import {
+  Target,
+  BookOpen,
+  FileText,
+  MessageSquare,
+  Briefcase,
+  ArrowRight,
+  Sparkles,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ReadinessGauge } from '@/components/shared/ReadinessGauge';
-import { getStoredSession } from '@/lib/storage/session';
 
 export default function DashboardPage() {
   const [sessionData, setSessionData] = useState<{
@@ -16,57 +23,105 @@ export default function DashboardPage() {
     readinessScore: number | null;
     activeResumeScore: number | null;
     activeInterviewScore: number | null;
+    activePlanSummary: {
+      completionPercentage: number;
+      completedTasksCount: number;
+      totalTasksCount: number;
+    } | null;
   }>({
     targetRole: null,
     currentSkills: [],
     readinessScore: null,
     activeResumeScore: null,
     activeInterviewScore: null,
+    activePlanSummary: null,
   });
 
   useEffect(() => {
-    const session = getStoredSession();
-    if (session && session.sessionId) {
-      fetch(`/api/session?sessionId=${session.sessionId}`, { cache: 'no-store' })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && !data.error) {
-            setSessionData({
-              targetRole: data.targetRole || session.targetRole || 'Junior Frontend Developer',
-              currentSkills: data.currentSkills || session.currentSkills,
-              readinessScore: data.readinessScore ?? null,
-              activeResumeScore: data.activeResumeSummary?.atsScore ?? null,
-              activeInterviewScore: data.activeInterviewSummary?.overallScore ?? null,
-            });
-          } else {
-            setSessionData({
-              targetRole: session.targetRole || 'Junior Frontend Developer',
-              currentSkills: session.currentSkills,
-              readinessScore: session.readinessScore || null,
-              activeResumeScore: null,
-              activeInterviewScore: null,
-            });
-          }
-        })
-        .catch(() => {
+    fetch('/api/session', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && !data.error) {
           setSessionData({
-            targetRole: session.targetRole || 'Junior Frontend Developer',
-            currentSkills: session.currentSkills,
-            readinessScore: session.readinessScore || null,
-            activeResumeScore: null,
-            activeInterviewScore: null,
+            targetRole: data.targetRole || null,
+            currentSkills: data.currentSkills || [],
+            readinessScore: data.readinessScore ?? null,
+            activeResumeScore: data.activeResumeSummary?.atsScore ?? null,
+            activeInterviewScore: data.activeInterviewSummary?.overallScore ?? null,
+            activePlanSummary: data.activePlanSummary || null,
           });
-        });
-    } else {
-      setSessionData({
-        targetRole: session.targetRole || 'Junior Frontend Developer',
-        currentSkills: session.currentSkills,
-        readinessScore: session.readinessScore || null,
-        activeResumeScore: null,
-        activeInterviewScore: null,
-      });
-    }
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  // Dynamic Next Recommended Action state machine
+  const getNextRecommendedAction = () => {
+    if (!sessionData.targetRole) {
+      return {
+        title: 'Complete Onboarding',
+        description: 'Choose your target role and skills to unlock your personalized dashboard.',
+        href: '/onboarding',
+        buttonText: 'Set Target Role',
+        badge: 'Step 1',
+      };
+    }
+    if (sessionData.readinessScore === null) {
+      return {
+        title: 'Run Skill Gap Diagnostic',
+        description: `Analyze your skills against verified market benchmarks for ${sessionData.targetRole}.`,
+        href: '/gap-detector',
+        buttonText: 'Run Gap Check',
+        badge: 'Crucial Next Step',
+      };
+    }
+    if (!sessionData.activePlanSummary) {
+      return {
+        title: 'Build Your Learning Plan',
+        description: 'Convert your missing skills into a structured week-by-week study plan with free resources.',
+        href: '/learning-plan',
+        buttonText: 'Build Learning Plan',
+        badge: 'Action Roadmap',
+      };
+    }
+    if ((sessionData.activePlanSummary.completionPercentage ?? 0) < 100) {
+      const pct = sessionData.activePlanSummary.completionPercentage ?? 0;
+      return {
+        title: `Continue Your Learning Plan (${pct}% done)`,
+        description: `Completed ${sessionData.activePlanSummary.completedTasksCount} of ${sessionData.activePlanSummary.totalTasksCount} tasks. Keep up the momentum!`,
+        href: '/learning-plan',
+        buttonText: 'Resume Study Plan',
+        badge: 'In Progress',
+      };
+    }
+    if (sessionData.activeResumeScore === null) {
+      return {
+        title: 'Check Resume Alignment',
+        description: 'Scan your resume against ATS criteria, find missing keywords, and get 5 rewritten bullet points.',
+        href: '/resume-checker',
+        buttonText: 'Review Resume',
+        badge: 'Interview Ready',
+      };
+    }
+    if (sessionData.activeInterviewScore === null) {
+      return {
+        title: 'Practice Mock Interview',
+        description: 'Simulate 5 real-world interview questions tailored to your gaps with instant AI feedback.',
+        href: '/interviews',
+        buttonText: 'Start Mock Interview',
+        badge: 'Final Prep',
+      };
+    }
+    return {
+      title: 'Explore Curated Job Matches',
+      description: 'Your profile is well-rounded! Check 40+ entry-level openings ranked by your skill match percentage.',
+      href: '/job-matches',
+      buttonText: 'Browse Openings',
+      badge: 'Ready to Apply',
+    };
+  };
+
+  const nextAction = getNextRecommendedAction();
 
   const featureCards = [
     {
@@ -74,15 +129,17 @@ export default function DashboardPage() {
       description: 'Review your matched competencies and prioritized missing skills.',
       href: '/gap-detector',
       icon: Target,
-      badge: 'Hero Feature',
+      badge: sessionData.readinessScore !== null ? `Score: ${sessionData.readinessScore}%` : 'Diagnostic',
       action: 'View Gap Report',
     },
     {
       title: 'Personal Learning Plan',
-      description: 'Execute your customized week-by-week roadmap and track completion.',
+      description: sessionData.activePlanSummary
+        ? `Progress: ${sessionData.activePlanSummary.completionPercentage}% (${sessionData.activePlanSummary.completedTasksCount}/${sessionData.activePlanSummary.totalTasksCount} tasks).`
+        : 'Execute your customized week-by-week roadmap and track completion.',
       href: '/learning-plan',
       icon: BookOpen,
-      badge: 'Roadmap',
+      badge: sessionData.activePlanSummary ? `${sessionData.activePlanSummary.completionPercentage}% Complete` : 'Roadmap',
       action: 'Open Learning Plan',
     },
     {
@@ -92,7 +149,7 @@ export default function DashboardPage() {
         : 'Optimize resume bullet points and ensure ATS keyword alignment.',
       href: '/resume-checker',
       icon: FileText,
-      badge: sessionData.activeResumeScore !== null ? `Score: ${sessionData.activeResumeScore}` : 'Optimization',
+      badge: sessionData.activeResumeScore !== null ? `ATS: ${sessionData.activeResumeScore}` : 'Optimization',
       action: 'Review Resume',
     },
     {
@@ -107,7 +164,7 @@ export default function DashboardPage() {
     },
     {
       title: 'Curated Job Matches',
-      description: 'Explore 40+ entry-level roles ranked by your skill match percentage.',
+      description: 'Explore 40+ entry-level roles ranked by your live skill match percentage.',
       href: '/job-matches',
       icon: Briefcase,
       badge: 'Opportunities',
@@ -121,7 +178,7 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl border bg-gradient-to-r from-primary/5 via-card to-card">
         <div>
           <Badge variant="secondary" className="mb-2 text-xs">
-            🎯 Target: {sessionData.targetRole}
+            🎯 Target: {sessionData.targetRole || 'Not set'}
           </Badge>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
             Career Readiness Dashboard
@@ -152,6 +209,28 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+      </div>
+
+      {/* Dynamic Next Recommended Action Card */}
+      <div className="p-6 rounded-2xl border border-primary/30 bg-primary/5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Badge variant="default" className="text-xs font-semibold">
+              {nextAction.badge}
+            </Badge>
+            <span className="text-xs font-bold uppercase tracking-wider text-primary">
+              Next Recommended Action
+            </span>
+          </div>
+          <h2 className="text-lg font-bold text-foreground">{nextAction.title}</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground">{nextAction.description}</p>
+        </div>
+        <Link href={nextAction.href} className="w-full md:w-auto shrink-0">
+          <Button size="default" className="w-full md:w-auto gap-2 shadow-sm font-semibold">
+            {nextAction.buttonText}
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </Link>
       </div>
 
       {/* 5 Feature Cards Grid */}

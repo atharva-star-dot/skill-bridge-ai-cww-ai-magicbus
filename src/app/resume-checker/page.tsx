@@ -8,7 +8,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { getStoredSession } from '@/lib/storage/session';
 import { ResumeReviewView } from '@/components/features/ResumeReviewView';
 
 interface MissingKeyword {
@@ -49,23 +48,25 @@ const MAX_CHARS = 15000;
 
 export default function ResumeCheckerPage() {
   const [targetRole, setTargetRole] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [resumeText, setResumeText] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [result, setResult] = useState<ResumeReviewResult | null>(null);
 
   useEffect(() => {
-    const session = getStoredSession();
-    if (session) {
-      setSessionId(session.sessionId);
-      setTargetRole(session.targetRole);
-    }
+    fetch('/api/session', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.targetRole) {
+          setTargetRole(data.targetRole);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sessionId || !targetRole) return;
+    if (!targetRole) return;
 
     if (resumeText.trim().length < 20) {
       setErrorMsg('Please paste at least 20 characters of your resume.');
@@ -86,7 +87,6 @@ export default function ResumeCheckerPage() {
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({
-          sessionId,
           targetRole,
           resumeText: resumeText.trim(),
         }),

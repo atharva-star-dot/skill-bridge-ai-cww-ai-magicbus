@@ -37,7 +37,8 @@ export const LearningPlanOutputSchema = z.object({
 
 // ── API input schema ───────────────────────────────────────────────────────
 export const LearningPlanInputSchema = z.object({
-  sessionId: z.string().min(1, 'Session ID required'),
+  sessionId: z.string().optional(),
+  userId: z.string().optional(),
   durationWeeks: z.union([z.literal(2), z.literal(4), z.literal(8)]).default(4),
 });
 

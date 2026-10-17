@@ -18,6 +18,14 @@ const QUESTION_BANKS: Record<string, SeedBankItem[]> = {
   'junior-frontend-developer': [
     {
       type: 'technical',
+      question: 'Can you explain how the JavaScript Event Loop works, specifically detailing the difference between the microtask queue (such as Promises) and the macrotask queue (such as setTimeout), and how this affects the order of execution?',
+      skill: 'JavaScript / Async & Event Loop',
+      expectedKeywords: ['event loop', 'microtask', 'macrotask', 'promises', 'settimeout', 'call stack', 'queue', 'order', 'execution', 'single threaded'],
+      modelAnswer:
+        'The JavaScript runtime is single-threaded and executes code sequentially on a call stack. Asynchronous operations are managed by the event loop, which coordinates between the call stack and two task queues: the microtask queue and the macrotask queue. When synchronous code finishes and the call stack is empty, the event loop drains the entire microtask queue (Promise callbacks, queueMicrotask). Only after all pending microtasks resolve does the event loop process a single macrotask (setTimeout, setInterval). Consequently, a resolved Promise callback always executes before a setTimeout callback.',
+    },
+    {
+      type: 'technical',
       question: 'Can you explain the difference between undefined and null in JavaScript, and how TypeScript handles them?',
       skill: 'JavaScript / TypeScript',
       expectedKeywords: ['undefined', 'null', 'primitive', 'type', 'assigned', 'strictnullchecks'],
@@ -284,8 +292,14 @@ export function evaluateAnswerFallback(
   }
   const questionEchoRatio = overlapWithQCount / Math.max(1, answerWords.length);
 
-  // If >= 70% of words are just repeating the question, score 2
-  if (questionEchoRatio >= 0.7 && wordCount <= cleanQ.split(/\s+/).length + 5) {
+  // If answer is an exact copy of the question, or >= 55% of words are repeating the question, score 2
+  const isDirectEcho =
+    cleanA === cleanQ ||
+    cleanQ.includes(cleanA) ||
+    cleanA.includes(cleanQ) ||
+    (questionEchoRatio >= 0.55 && wordCount <= cleanQ.split(/\s+/).length + 8);
+
+  if (isDirectEcho) {
     return {
       score: 2,
       strengths: ['Identified the prompt topic.'],
@@ -332,10 +346,10 @@ export function evaluateAnswerFallback(
 
   // Deterministic scoring rubric:
   // Base score from word count depth:
-  let depthScore = 4;
-  if (wordCount >= 25 && wordCount < 50) depthScore = 5;
-  else if (wordCount >= 50 && wordCount < 100) depthScore = 6;
-  else if (wordCount >= 100) depthScore = 7;
+  let depthScore = 3;
+  if (wordCount >= 25 && wordCount < 50) depthScore = 4;
+  else if (wordCount >= 50 && wordCount < 100) depthScore = 5;
+  else if (wordCount >= 100) depthScore = 6;
 
   // Bonus for keyword coverage:
   let keywordBonus = 0;
@@ -365,7 +379,7 @@ export function evaluateAnswerFallback(
     }
   }
 
-  const finalScore = Math.min(10, Math.max(3, depthScore + keywordBonus + structureBonus));
+  const finalScore = Math.min(10, Math.max(1, depthScore + keywordBonus + structureBonus));
 
   const strengths: string[] = [
     `Clear communication with substantive detail (${wordCount} words provided).`,

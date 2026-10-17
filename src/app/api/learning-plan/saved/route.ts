@@ -1,32 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const sessionId = searchParams.get('sessionId');
-
-  if (!sessionId) {
-    return NextResponse.json({ error: 'sessionId required' }, { status: 400 });
-  }
-
+export async function GET(_req: NextRequest) {
   try {
-    // 1. Get current session to know the active role
-    const session = await prisma.session.findUnique({
-      where: { id: sessionId },
-    });
+    const supabase = createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-    if (!session || !session.targetRoleTitle) {
-      return NextResponse.json({ hasGapReport: false, activePlan: null }, { headers: { 'Cache-Control': 'no-store' } });
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const currentRole = session.targetRoleTitle;
+    const userId = user.id;
+
+    // 1. Get current profile to know the active role
+    const profile = await prisma.profile.findUnique({
+      where: { id: userId },
+    });
+
+    if (!profile || !profile.targetRole) {
+      return NextResponse.json(
+        { hasGapReport: false, activePlan: null },
+        { headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
+
+    const currentRole = profile.targetRole;
 
     // 2. Check if a gap report exists for THIS specific active role
     const gapReport = await prisma.skillGapReport.findFirst({
       where: {
-        sessionId,
+        userId,
         targetRole: { equals: currentRole },
       },
       orderBy: { createdAt: 'desc' },
@@ -34,13 +43,16 @@ export async function GET(req: NextRequest) {
 
     if (!gapReport) {
       // Role was changed but user has not run gap analysis for it yet
-      return NextResponse.json({ hasGapReport: false, activePlan: null }, { headers: { 'Cache-Control': 'no-store' } });
+      return NextResponse.json(
+        { hasGapReport: false, activePlan: null },
+        { headers: { 'Cache-Control': 'no-store' } }
+      );
     }
 
     // 3. Find the latest learning plan matching THIS active role
     const savedPlan = await prisma.learningPlan.findFirst({
       where: {
-        sessionId,
+        userId,
         targetRole: { equals: currentRole },
       },
       orderBy: { createdAt: 'desc' },
@@ -49,7 +61,10 @@ export async function GET(req: NextRequest) {
 
     if (!savedPlan) {
       // User has a gap report for this role, but has not built a learning plan yet
-      return NextResponse.json({ hasGapReport: true, targetRole: currentRole, activePlan: null }, { headers: { 'Cache-Control': 'no-store' } });
+      return NextResponse.json(
+        { hasGapReport: true, targetRole: currentRole, activePlan: null },
+        { headers: { 'Cache-Control': 'no-store' } }
+      );
     }
 
     // Group tasks by week
@@ -77,20 +92,26 @@ export async function GET(req: NextRequest) {
         miniProject: '',
       }));
 
-    return NextResponse.json({
-      planId: savedPlan.id,
-      targetRole: savedPlan.targetRole,
-      durationWeeks: savedPlan.durationWeeks,
-      completionPercentage: savedPlan.completionPercentage,
-      weeks,
-      overallGoal: '',
-      source: undefined,
-      hasGapReport: true,
-    }, {
-      headers: { 'Cache-Control': 'no-store' },
-    });
+    return NextResponse.json(
+      {
+        planId: savedPlan.id,
+        targetRole: savedPlan.targetRole,
+        durationWeeks: savedPlan.durationWeeks,
+        completionPercentage: savedPlan.completionPercentage,
+        weeks,
+        overallGoal: '',
+        source: undefined,
+        hasGapReport: true,
+      },
+      {
+        headers: { 'Cache-Control': 'no-store' },
+      }
+    );
   } catch (err: any) {
     console.error('[SavedPlan] Error:', err);
-    return NextResponse.json({ hasGapReport: false }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(
+      { hasGapReport: false },
+      { status: 500, headers: { 'Cache-Control': 'no-store' } }
+    );
   }
 }

@@ -22,7 +22,8 @@ export const SectionChecksSchema = z.object({
 });
 
 export const ResumeReviewInputSchema = z.object({
-  sessionId: z.string().min(1, 'Session ID is required'),
+  sessionId: z.string().optional(),
+  userId: z.string().optional(),
   resumeText: z.string().min(20, 'Resume text must be at least 20 characters').max(15000, 'Resume text exceeds 15,000 characters limit'),
   targetRole: z.string().min(2, 'Target role is required'),
 });

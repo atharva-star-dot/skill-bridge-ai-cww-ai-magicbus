@@ -78,8 +78,6 @@ export function buildEvaluateAnswerPrompt(
   questionText: string,
   userAnswer: string
 ): string {
-  const isMinimal = userAnswer.trim().split(/\s+/).length < 5;
-
   return `You are an expert interviewer evaluating a candidate's answer for the position of "${targetRole}".
 
 QUESTION TYPE: ${questionType.toUpperCase()}
@@ -93,11 +91,13 @@ RUBRIC & STRICT SCORING GUIDELINES (EVALUATE FACTUAL CORRECTNESS, NOT TONE OR CO
 - Score strictly from 1 to 10 (integer).
 - 1-3 (Wrong / Irrelevant / Extremely Minimal): The candidate provides factually incorrect explanations, confuses opposite concepts, answers a completely different question, or submits minimal keywords (e.g. single words, bullet lists with no explanation). Even if written with high confidence, FACTUAL ERRORS or fabricated mechanics MUST score 1 to 3.
 - 4-6 (Mediocre / Half-Correct / Incomplete): The candidate grasps the high-level idea or defines one part correctly, but is missing core mechanisms, mixes up nuances, or gives an incomplete answer lacking practical explanation.
-- 7-9 (Strong / Accurate / Nuanced): The candidate accurately explains the underlying mechanics, demonstrates correct technical knowledge (e.g. microtasks vs macrotasks, execution order, render phases), addresses edge cases, and communicates clearly.
-- 10 (Mastery): Flawless explanation covering all technical facets, execution sequence, browser implications, and practical examples.
+- 7-9 (Strong / Accurate / Nuanced): The candidate accurately explains the underlying mechanics, demonstrates correct technical knowledge (e.g. microtasks vs macrotasks, execution order, render phases), addresses edge cases, and communicates clearly. High quality, accurate candidate answers MUST be scored strictly between 7 and 9 (typically 8, or 9 for exceptional depth).
+- 10 (Mastery / Theoretical Perfection): DO NOT award a 10 unless the candidate explicitly cites ECMA-262 specification clauses or V8/SpiderMonkey engine implementation details. Even flawless standard fresher answers must be capped at 8 or 9.
 
 CRITICAL INSTRUCTION:
-Do NOT award points for confident tone, buzzword stuffing, or length if the core technical claim is factually false. If a candidate confidently asserts incorrect facts (for example, claiming setTimeout runs before Promise microtasks or claiming null is an unassigned variable), score it strictly between 1 and 3.
+1. Strong, accurate answers must receive a score of 7, 8, or 9. Never give a 10 to a standard good answer.
+2. Mediocre, incomplete answers must receive 4, 5, or 6.
+3. Wrong, irrelevant, or factually incorrect answers must receive 1, 2, or 3. Even if written with high confidence, FACTUAL ERRORS or fabricated mechanics MUST score 1 to 3.
 
 EVALUATION RULES:
 1. Provide 2-3 specific "strengths" noting what was good or attempted in the candidate's answer. (If the answer was wrong or minimal, acknowledge the attempt or topic reference).

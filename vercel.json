@@ -1,11 +1,12 @@
 {
-  "buildCommand": "npx prisma generate && npx prisma db push && npm run build",
-  "installCommand": "npm install",
   "framework": "nextjs",
   "regions": ["bom1"],
-  "env": {
-    "GEMINI_API_KEY": "@gemini-api-key",
-    "DATABASE_URL": "@database-url",
-    "GEMINI_MODEL": "gemini-2.0-flash-exp"
+  "functions": {
+    "src/app/api/gap-detector/route.ts": { "maxDuration": 30 },
+    "src/app/api/learning-plan/route.ts": { "maxDuration": 30 },
+    "src/app/api/resume-checker/route.ts": { "maxDuration": 30 },
+    "src/app/api/interview/start/route.ts": { "maxDuration": 30 },
+    "src/app/api/interview/answer/route.ts": { "maxDuration": 30 },
+    "src/app/api/interview/summary/route.ts": { "maxDuration": 30 }
   }
 }
