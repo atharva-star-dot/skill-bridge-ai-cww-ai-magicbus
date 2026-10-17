@@ -347,9 +347,19 @@ export default function LearningPlanPage() {
                 variant="outline"
                 size="sm"
                 className="gap-2"
-                onClick={() => { setPlan(null); setError(null); }}
+                onClick={() => {
+                  const completedTasksCount = plan.weeks.flatMap((w) => w.tasks).filter((t) => t.isCompleted).length;
+                  if (completedTasksCount > 0) {
+                    const confirmDiscard = window.confirm(
+                      `You have completed ${completedTasksCount} tasks in this plan. Discard your current progress and generate a fresh plan?`
+                    );
+                    if (!confirmDiscard) return;
+                  }
+                  setPlan(null);
+                  setError(null);
+                }}
               >
-                <RefreshCcw className="h-3.5 w-3.5" /> Regenerate Plan
+                <RefreshCcw className="h-3.5 w-3.5" /> Rebuild Plan
               </Button>
             </CardContent>
           </Card>

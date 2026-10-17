@@ -42,6 +42,7 @@ model SkillGapReport {
   id              String    @id @default(uuid())
   sessionId       String
   targetRole      String
+  skillsHash      String?   // Hash of normalized currentSkills when report was generated
   readinessScore  Int
   matchedSkills   String    // JSON string of string[]
   missingSkills   String    // JSON string of MissingSkillItem[]

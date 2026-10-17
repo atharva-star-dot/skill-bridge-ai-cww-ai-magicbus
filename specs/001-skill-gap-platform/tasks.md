@@ -65,11 +65,13 @@
 
 **Independent Test**: Navigate to `/resume-checker`, paste resume text for a selected role, click Evaluate, and verify ATS score, keywords, and 5 rewritten bullets appear in under 45 seconds.
 
-- [ ] T024 [P] [US4] Create Zod validation schema for resume ATS analysis and exactly 5 bullet rewrites in `src/lib/schemas/resume-checker.schema.ts`
-- [ ] T025 [P] [US4] Create AI prompt template for technical resume evaluation and XYZ-formula rewrites in `src/lib/ai/prompts/resume-checker.prompt.ts`
-- [ ] T026 [US4] Implement POST route handler for resume analysis with database caching in `src/app/api/resume-checker/route.ts`
-- [ ] T027 [P] [US4] Implement before/after bullet rewrite comparison card with copy-to-clipboard functionality in `src/components/features/ResumeReviewView.tsx`
-- [ ] T028 [US4] Implement Resume Checker page with text area, sample text filler, ATS gauge, and keyword pills in `src/app/resume-checker/page.tsx`
+- [x] T024 [P] [US4] Create Zod validation schema for resume ATS analysis and exactly 5 bullet rewrites in `src/lib/schemas/resume-checker.schema.ts`
+- [x] T025 [P] [US4] Create AI prompt template for technical resume evaluation and XYZ-formula rewrites in `src/lib/ai/prompts/resume-checker.prompt.ts`
+- [x] T026 [US4] Implement POST route handler for resume analysis with database caching in `src/app/api/resume-checker/route.ts`
+- [x] T027 [P] [US4] Implement before/after bullet rewrite comparison card with copy-to-clipboard functionality in `src/components/features/ResumeReviewView.tsx`
+- [x] T028 [US4] Implement Resume Checker page with text area, sample text filler, ATS gauge, and keyword pills in `src/app/resume-checker/page.tsx`
+
+**Checkpoint**: Job seekers can now review resumes against target roles with ATS scoring and 5 XYZ-formula bullet rewrites.
 
 ---
 

@@ -1,0 +1,110 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/db';
+import { executeGeminiWithRetry, getActiveModel } from '@/lib/ai/gemini';
+import { ResumeReviewInputSchema, ResumeReviewOutputSchema, ResumeReviewOutput } from '@/lib/schemas/resume-checker.schema';
+import { buildResumeCheckerPrompt } from '@/lib/ai/prompts/resume-checker.prompt';
+import { generateFallbackResumeReview } from '@/lib/ai/fallbacks/resume-checker.fallback';
+import { SEED_ROLES } from '@/data/seed-roles';
+
+export const dynamic = 'force-dynamic';
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+
+    // 1. Zod input validation (with 15,000 char check)
+    const validation = ResumeReviewInputSchema.safeParse(body);
+    if (!validation.success) {
+      const firstIssue = validation.error.issues[0];
+      return NextResponse.json(
+        { error: firstIssue ? firstIssue.message : 'Invalid request payload', details: validation.error.format() },
+        { status: 400 }
+      );
+    }
+
+    const { sessionId, resumeText, targetRole } = validation.data;
+
+    // 2. Fetch seed benchmark skills or latest SkillGapReport skills for role
+    const seedRole = SEED_ROLES.find(
+      (r) => r.title.toLowerCase() === targetRole.toLowerCase() || r.slug === targetRole.toLowerCase()
+    );
+    const benchmarkSkills = seedRole ? [...seedRole.requiredSkills, ...seedRole.goodToHaveSkills] : [];
+
+    // Check if session has a gap report to flag overlapping missing skills
+    let roleMissingSkills: string[] = [];
+    try {
+      const gapReport = await prisma.skillGapReport.findFirst({
+        where: { sessionId, targetRole },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (gapReport?.missingSkills) {
+        const parsed = JSON.parse(gapReport.missingSkills);
+        roleMissingSkills = parsed.map((m: any) => m.name.toLowerCase());
+      }
+    } catch {}
+
+    let output: ResumeReviewOutput;
+
+    // 3. AI analysis with fallback
+    if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '') {
+      try {
+        console.info(`[ResumeChecker] Analyzing resume via Gemini (${getActiveModel()}) for role: ${targetRole}`);
+        const prompt = buildResumeCheckerPrompt(targetRole, resumeText, benchmarkSkills);
+        const aiResult = await executeGeminiWithRetry(prompt, ResumeReviewOutputSchema);
+        output = { ...aiResult, source: 'ai' };
+      } catch (aiError: any) {
+        console.warn('[ResumeChecker] Gemini AI failed, using deterministic fallback:', aiError?.message);
+        output = generateFallbackResumeReview(targetRole, resumeText, benchmarkSkills);
+      }
+    } else {
+      console.info('[ResumeChecker] No GEMINI_API_KEY — using deterministic fallback.');
+      output = generateFallbackResumeReview(targetRole, resumeText, benchmarkSkills);
+    }
+
+    // 4. Tag missing keywords that overlap with actual skill gaps
+    const annotatedKeywords = output.missingKeywords.map((item) => ({
+      ...item,
+      isSkillGap: roleMissingSkills.some(
+        (s) => s.includes(item.keyword.toLowerCase()) || item.keyword.toLowerCase().includes(s)
+      ),
+    }));
+
+    const finalOutput = {
+      ...output,
+      missingKeywords: annotatedKeywords,
+    };
+
+    // 5. Persist review in database per session and targetRole (do not store raw resumeText)
+    try {
+      // Remove previous reviews for this specific role so only the latest is active
+      await prisma.resumeReview.deleteMany({
+        where: { sessionId, targetRole },
+      });
+
+      await prisma.resumeReview.create({
+        data: {
+          sessionId,
+          targetRole,
+          atsScore: finalOutput.atsScore,
+          strengths: JSON.stringify(finalOutput.strengths),
+          weaknesses: JSON.stringify(finalOutput.weaknesses),
+          missingKeywords: JSON.stringify(finalOutput.missingKeywords),
+          bulletRewrites: JSON.stringify(finalOutput.bulletRewrites),
+        },
+      });
+    } catch (dbError) {
+      console.warn('[ResumeChecker] Database save warning:', dbError);
+    }
+
+    return NextResponse.json(finalOutput, {
+      status: 200,
+      headers: { 'Cache-Control': 'no-store' },
+    });
+  } catch (error: any) {
+    console.error('[ResumeChecker] Error:', error);
+    return NextResponse.json(
+      { error: error?.message || 'An unexpected error occurred during resume review.' },
+      { status: 500 }
+    );
+  }
+}

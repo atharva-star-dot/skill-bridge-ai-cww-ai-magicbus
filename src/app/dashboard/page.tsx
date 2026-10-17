@@ -13,11 +13,13 @@ export default function DashboardPage() {
   const [sessionData, setSessionData] = useState<{
     targetRole: string | null;
     currentSkills: string[];
-    readinessScore: number;
+    readinessScore: number | null;
+    activeResumeScore: number | null;
   }>({
     targetRole: null,
     currentSkills: [],
-    readinessScore: 0,
+    readinessScore: null,
+    activeResumeScore: null,
   });
 
   useEffect(() => {
@@ -30,13 +32,15 @@ export default function DashboardPage() {
             setSessionData({
               targetRole: data.targetRole || session.targetRole || 'Junior Frontend Developer',
               currentSkills: data.currentSkills || session.currentSkills,
-              readinessScore: data.readinessScore ?? session.readinessScore ?? 65,
+              readinessScore: data.readinessScore ?? null,
+              activeResumeScore: data.activeResumeSummary?.atsScore ?? null,
             });
           } else {
             setSessionData({
               targetRole: session.targetRole || 'Junior Frontend Developer',
               currentSkills: session.currentSkills,
-              readinessScore: session.readinessScore || 65,
+              readinessScore: session.readinessScore || null,
+              activeResumeScore: null,
             });
           }
         })
@@ -44,14 +48,16 @@ export default function DashboardPage() {
           setSessionData({
             targetRole: session.targetRole || 'Junior Frontend Developer',
             currentSkills: session.currentSkills,
-            readinessScore: session.readinessScore || 65,
+            readinessScore: session.readinessScore || null,
+            activeResumeScore: null,
           });
         });
     } else {
       setSessionData({
         targetRole: session.targetRole || 'Junior Frontend Developer',
         currentSkills: session.currentSkills,
-        readinessScore: session.readinessScore || 65,
+        readinessScore: session.readinessScore || null,
+        activeResumeScore: null,
       });
     }
   }, []);
@@ -75,10 +81,12 @@ export default function DashboardPage() {
     },
     {
       title: 'ATS Resume Checker',
-      description: 'Optimize resume bullet points and ensure ATS keyword alignment.',
+      description: sessionData.activeResumeScore !== null
+        ? `Latest ATS Score: ${sessionData.activeResumeScore}/100. Review tailored keyword tips and 5 bullet rewrites.`
+        : 'Optimize resume bullet points and ensure ATS keyword alignment.',
       href: '/resume-checker',
       icon: FileText,
-      badge: 'Optimization',
+      badge: sessionData.activeResumeScore !== null ? `Score: ${sessionData.activeResumeScore}` : 'Optimization',
       action: 'Review Resume',
     },
     {
@@ -116,7 +124,13 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <ReadinessGauge score={sessionData.readinessScore} size="sm" showLabel={false} />
+          {sessionData.readinessScore !== null ? (
+            <ReadinessGauge score={sessionData.readinessScore} size="sm" showLabel={false} />
+          ) : (
+            <div className="px-3 py-1.5 rounded-lg border border-dashed text-xs text-muted-foreground bg-muted/40 font-medium">
+              Gap check needed
+            </div>
+          )}
           <div className="flex flex-col sm:flex-row gap-2">
             <Link href="/onboarding">
               <Button variant="outline" size="sm" className="text-xs">

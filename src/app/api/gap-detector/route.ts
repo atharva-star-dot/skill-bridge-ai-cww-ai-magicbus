@@ -4,6 +4,7 @@ import { executeGeminiWithRetry } from '@/lib/ai/gemini';
 import { GapDetectorInputSchema, GapDetectorOutputSchema, GapDetectorOutput } from '@/lib/schemas/gap-detector.schema';
 import { buildSkillGapPrompt } from '@/lib/ai/prompts/gap-detector.prompt';
 import { SEED_ROLES } from '@/data/seed-roles';
+import { hashSkills } from '@/lib/utils/role-key';
 
 export const dynamic = 'force-dynamic';
 
@@ -141,11 +142,13 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // 2. Insert new SkillGapReport for this role
+      // 2. Insert new SkillGapReport for this role with skillsHash
+      const sHash = hashSkills(currentSkills);
       await prisma.skillGapReport.create({
         data: {
           sessionId,
           targetRole,
+          skillsHash: sHash,
           readinessScore: output.readinessScore,
           matchedSkills: JSON.stringify(output.matchedSkills),
           missingSkills: JSON.stringify(output.missingSkills),

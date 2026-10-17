@@ -7,6 +7,7 @@ interface ReadinessGaugeProps {
   score: number;
   size?: 'sm' | 'md' | 'lg';
   showLabel?: boolean;
+  label?: string;
   className?: string;
 }
 
@@ -14,6 +15,7 @@ export function ReadinessGauge({
   score,
   size = 'md',
   showLabel = true,
+  label,
   className,
 }: ReadinessGaugeProps) {
   const boundedScore = Math.max(0, Math.min(100, Math.round(score)));

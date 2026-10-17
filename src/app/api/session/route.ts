@@ -21,13 +21,22 @@ export async function GET(req: NextRequest) {
         sessionId,
         targetRole: null,
         currentSkills: [],
-        readinessScore: 0,
+        readinessScore: null,
         activePlanSummary: null,
         updatedAt: new Date().toISOString(),
       }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
     const currentRole = session.targetRoleTitle;
+
+    // Check if an active gap report exists for THIS role
+    const activeReport = await prisma.skillGapReport.findFirst({
+      where: {
+        sessionId,
+        targetRole: { equals: currentRole },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
     // Find the latest learning plan strictly for THIS active role
     const activePlan = await prisma.learningPlan.findFirst({
@@ -55,12 +64,74 @@ export async function GET(req: NextRequest) {
         }
       : null;
 
+    // Readiness score calculation:
+    // If no gap report exists yet for this role, return null so UI shows "Run the gap detector"
+    // If report exists and plan has tasks completed, calculate/restore the boosted score.
+    // If report exists but no plan or 0 tasks, return base report score.
+    let readinessScore: number | null = null;
+
+    if (activeReport) {
+      const baseScore = activeReport.readinessScore;
+      if (activePlan && activePlan.tasks.length > 0) {
+        const completedTasks = activePlan.tasks.filter((t) => t.isCompleted);
+        if (completedTasks.length > 0) {
+          // Calculate weighted progress
+          let missingPriorityMap = new Map<string, number>();
+          try {
+            const missingItems: Array<{ name: string; priority: string }> = JSON.parse(activeReport.missingSkills || '[]');
+            for (const item of missingItems) {
+              const w = item.priority === 'High' ? 3 : item.priority === 'Medium' ? 2 : 1;
+              missingPriorityMap.set(item.name.toLowerCase(), w);
+            }
+          } catch {}
+
+          let totalWeight = 0;
+          let completedWeight = 0;
+          for (const t of activePlan.tasks) {
+            let taskWeight = 2;
+            Array.from(missingPriorityMap.entries()).forEach(([skillName, w]) => {
+              if (t.title.toLowerCase().includes(skillName) || t.description.toLowerCase().includes(skillName)) {
+                taskWeight = Math.max(taskWeight, w);
+              }
+            });
+            totalWeight += taskWeight;
+            if (t.isCompleted) completedWeight += taskWeight;
+          }
+          const weightedProgress = totalWeight > 0 ? (completedWeight / totalWeight) : (completedTasks.length / activePlan.tasks.length);
+          const potentialGain = 95 - baseScore;
+          readinessScore = Math.min(95, Math.round(baseScore + potentialGain * weightedProgress));
+        } else {
+          readinessScore = baseScore;
+        }
+      } else {
+        readinessScore = baseScore;
+      }
+    }
+
+    // Find latest resume review strictly for THIS active role
+    const activeReview = await prisma.resumeReview.findFirst({
+      where: {
+        sessionId,
+        targetRole: { equals: currentRole },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const activeResumeSummary = activeReview
+      ? {
+          id: activeReview.id,
+          atsScore: activeReview.atsScore,
+          createdAt: activeReview.createdAt.toISOString(),
+        }
+      : null;
+
     return NextResponse.json({
       sessionId: session.id,
       targetRole: session.targetRoleTitle,
       currentSkills: parsedSkills,
-      readinessScore: session.readinessScore,
+      readinessScore,
       activePlanSummary,
+      activeResumeSummary,
       updatedAt: session.updatedAt.toISOString(),
     }, {
       headers: { 'Cache-Control': 'no-store' },
@@ -80,29 +151,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'sessionId is required' }, { status: 400 });
     }
 
-    // Check if targetRole is changing
     const existingSession = await prisma.session.findUnique({ where: { id: sessionId } });
-    const isRoleChanging = existingSession && targetRole && existingSession.targetRoleTitle !== targetRole;
-
-    // If role changed, reset readinessScore to 0 or incoming score (not old boosted score)
-    const effectiveReadinessScore = typeof readinessScore === 'number'
-      ? readinessScore
-      : isRoleChanging
-      ? 0
-      : existingSession?.readinessScore ?? 0;
 
     const session = await prisma.session.upsert({
       where: { id: sessionId },
       update: {
         ...(targetRole ? { targetRoleTitle: targetRole } : {}),
         ...(currentSkills ? { currentSkills: JSON.stringify(currentSkills) } : {}),
-        readinessScore: effectiveReadinessScore,
+        ...(typeof readinessScore === 'number' ? { readinessScore } : {}),
       },
       create: {
         id: sessionId,
         targetRoleTitle: targetRole || null,
         currentSkills: JSON.stringify(currentSkills || []),
-        readinessScore: effectiveReadinessScore,
+        readinessScore: typeof readinessScore === 'number' ? readinessScore : 0,
       },
     });
 
@@ -110,7 +172,6 @@ export async function POST(req: NextRequest) {
       success: true,
       sessionId: session.id,
       targetRole: session.targetRoleTitle,
-      readinessScore: session.readinessScore,
       updatedAt: session.updatedAt.toISOString(),
     }, {
       headers: { 'Cache-Control': 'no-store' },
