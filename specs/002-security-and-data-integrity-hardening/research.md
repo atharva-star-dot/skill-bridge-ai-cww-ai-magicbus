@@ -63,3 +63,9 @@ The repository's `vercel.json` already sets `regions: ["bom1"]` and 30-second ma
 4. Prisma, **Connection URLs** — PostgreSQL URL syntax and percent-encoding reserved characters: <https://www.prisma.io/docs/orm/reference/connection-urls>
 
 The Prisma documentation currently redirects to the latest version; project-specific compatibility remains pinned to the installed Prisma 5.21 dependency. The SQL `04_hardening.sql` and a connection smoke test against the configured project are the implementation acceptance gates.
+
+### Cross-schema Auth foreign key and Prisma schema diff
+
+The SQL schema intentionally keeps `public.profiles.id` linked to `auth.users(id)` with `ON DELETE CASCADE`. Prisma's `migrate diff --from-url` introspection fails with P4002 on this cross-schema foreign key because the Prisma schema does not enable `multiSchema` or model the Supabase `auth` schema. The CI-only drift test first asserts through `pg_constraint` that `profiles_id_fkey` points from `public.profiles(id)` to `auth.users(id)` with cascade deletion, then drops only that constraint from its disposable local test database before running the Prisma diff. The test refuses to perform that change unless `TEST_DATABASE_URL` uses `localhost` or `127.0.0.1` and its database name contains `test`.
+
+This excluded constraint is still checked by the drift test's precondition and by the read-only `SC-003` check in `scripts/verify-supabase.ts`; it is not removed from production SQL. The verifier checks the referenced schemas, tables and columns, constraint name, and `ON DELETE CASCADE` action.

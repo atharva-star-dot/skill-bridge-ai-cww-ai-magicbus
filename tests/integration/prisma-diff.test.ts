@@ -1,7 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { formatPrismaDiffFailure } from './prisma-diff';
+import {
+  assertDisposableTestDatabaseUrl,
+  formatPrismaDiffFailure,
+} from './prisma-diff';
 
 describe('Prisma schema-diff diagnostics', () => {
+  it('allows only local PostgreSQL databases with test in the database name', () => {
+    expect(() =>
+      assertDisposableTestDatabaseUrl('postgresql://postgres:secret@localhost:5432/skill_bridge_test')
+    ).not.toThrow();
+    expect(() =>
+      assertDisposableTestDatabaseUrl('postgresql://postgres:secret@127.0.0.1:5432/test_db')
+    ).not.toThrow();
+
+    expect(() =>
+      assertDisposableTestDatabaseUrl('postgresql://postgres:secret@db.example.com:5432/test_db')
+    ).toThrow(/Refusing database change/);
+    expect(() =>
+      assertDisposableTestDatabaseUrl('postgresql://postgres:secret@localhost:5432/production')
+    ).toThrow(/Refusing database change/);
+  });
+
   it('distinguishes command errors from schema drift and redacts connection strings', () => {
     const connectionString =
       'postgresql://postgres:private-password@localhost:5432/testdb';

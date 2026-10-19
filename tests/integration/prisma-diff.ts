@@ -1,3 +1,24 @@
+export function assertDisposableTestDatabaseUrl(databaseUrl: string): void {
+  let parsed: URL;
+  let databaseName: string;
+  try {
+    parsed = new URL(databaseUrl);
+    databaseName = decodeURIComponent(parsed.pathname.replace(/^\/+/, ''));
+  } catch {
+    throw new Error('Refusing database change: TEST_DATABASE_URL is not a valid URL.');
+  }
+
+  if (
+    !['postgres:', 'postgresql:'].includes(parsed.protocol) ||
+    !['localhost', '127.0.0.1'].includes(parsed.hostname.toLowerCase()) ||
+    !databaseName.toLowerCase().includes('test')
+  ) {
+    throw new Error(
+      'Refusing database change: TEST_DATABASE_URL must use localhost or 127.0.0.1 and a database name containing "test".'
+    );
+  }
+}
+
 export function formatPrismaDiffFailure(
   status: number | null,
   stdout: string,

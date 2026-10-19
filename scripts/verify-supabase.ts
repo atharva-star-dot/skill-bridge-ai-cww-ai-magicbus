@@ -33,6 +33,28 @@ async function verifySupabase(): Promise<void> {
   let failed = false;
   try {
     const checks = [
+      await runCheck(prisma, 'SC-003', 'profiles references auth.users(id) with ON DELETE CASCADE', async () => {
+        const rows = await prisma.$queryRaw<Array<BooleanResult>>`
+          SELECT EXISTS (
+            SELECT 1
+            FROM pg_constraint AS fk
+            JOIN pg_attribute AS profile_id
+              ON profile_id.attrelid = fk.conrelid
+             AND profile_id.attname = 'id'
+            JOIN pg_attribute AS auth_id
+              ON auth_id.attrelid = fk.confrelid
+             AND auth_id.attname = 'id'
+            WHERE fk.contype = 'f'
+              AND fk.conname = 'profiles_id_fkey'
+              AND fk.conrelid = 'public.profiles'::regclass
+              AND fk.confrelid = 'auth.users'::regclass
+              AND fk.confdeltype = 'c'
+              AND fk.conkey = ARRAY[profile_id.attnum]::smallint[]
+              AND fk.confkey = ARRAY[auth_id.attnum]::smallint[]
+          ) AS passed
+        `;
+        return rows[0]?.passed === true;
+      }),
       await runCheck(prisma, 'SC-003', 'user-owned and nested foreign keys cascade', async () => {
         const rows = await prisma.$queryRaw<Array<{ table_name: string; passed: boolean }>>`
           WITH expected(table_name, source_column, parent_table, parent_column) AS (

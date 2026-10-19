@@ -8,7 +8,10 @@ import { POST as answerInterview } from '@/app/api/interview/answer/route';
 import { prisma } from '@/lib/db';
 import { reserveAiUsage } from '@/lib/ai/rate-limit';
 import { deleteAuthUser, seedAuthUser } from './stub-auth';
-import { formatPrismaDiffFailure } from './prisma-diff';
+import {
+  assertDisposableTestDatabaseUrl,
+  formatPrismaDiffFailure,
+} from './prisma-diff';
 
 const authState = vi.hoisted(() => ({ userId: '' }));
 
@@ -146,7 +149,38 @@ describe.skipIf(!databaseUrl)('PostgreSQL security and integrity integration', (
     expect(createdSessions).toBe(3);
   });
 
-  it('has no Prisma schema drift from the applied SQL schema', () => {
+  it('has no Prisma schema drift from the applied SQL schema', async () => {
+    const testDatabaseUrl = getTestDatabaseUrl();
+    assertDisposableTestDatabaseUrl(testDatabaseUrl);
+
+    const foreignKeyRows = await prisma.$queryRaw<Array<{ passed: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM pg_constraint AS fk
+        JOIN pg_attribute AS profile_id
+          ON profile_id.attrelid = fk.conrelid
+         AND profile_id.attname = 'id'
+        JOIN pg_attribute AS auth_id
+          ON auth_id.attrelid = fk.confrelid
+         AND auth_id.attname = 'id'
+        WHERE fk.contype = 'f'
+          AND fk.conname = 'profiles_id_fkey'
+          AND fk.conrelid = 'public.profiles'::regclass
+          AND fk.confrelid = 'auth.users'::regclass
+          AND fk.confdeltype = 'c'
+          AND fk.conkey = ARRAY[profile_id.attnum]::smallint[]
+          AND fk.confkey = ARRAY[auth_id.attnum]::smallint[]
+      ) AS passed
+    `;
+    expect(
+      foreignKeyRows[0]?.passed,
+      'Expected profiles_id_fkey to reference auth.users(id) with ON DELETE CASCADE before Prisma schema diff.'
+    ).toBe(true);
+
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE public.profiles DROP CONSTRAINT profiles_id_fkey'
+    );
+
     const prismaCli = resolve(process.cwd(), 'node_modules', 'prisma', 'build', 'index.js');
     const schemaPath = resolve(process.cwd(), 'prisma', 'schema.prisma');
     const result = spawnSync(
@@ -156,7 +190,7 @@ describe.skipIf(!databaseUrl)('PostgreSQL security and integrity integration', (
         'migrate',
         'diff',
         '--from-url',
-        getTestDatabaseUrl(),
+        testDatabaseUrl,
         '--to-schema-datamodel',
         schemaPath,
         '--exit-code',
@@ -165,8 +199,8 @@ describe.skipIf(!databaseUrl)('PostgreSQL security and integrity integration', (
         cwd: process.cwd(),
         env: {
           ...process.env,
-          DATABASE_URL: getTestDatabaseUrl(),
-          DIRECT_URL: getTestDatabaseUrl(),
+          DATABASE_URL: testDatabaseUrl,
+          DIRECT_URL: testDatabaseUrl,
         },
         encoding: 'utf8',
         stdio: 'pipe',
