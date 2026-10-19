@@ -1,5 +1,6 @@
 import type { MissingSkillItem } from '@/lib/schemas/gap-detector.schema';
 import type { LearningPlanOutput, WeekPlan, PlanTaskItem } from '@/lib/schemas/learning-plan.schema';
+import { skillsMatch } from '@/lib/scoring/skill-matching';
 
 const SKILL_TASK_MAP: Record<
   string,
@@ -215,11 +216,8 @@ const SKILL_TASK_MAP: Record<
 };
 
 function getTasksForSkill(skillName: string, targetRole: string): { title: string; description: string; hours: number; resources: any[] }[] {
-  // Direct match
-  if (SKILL_TASK_MAP[skillName]) return SKILL_TASK_MAP[skillName].tasks;
-  // Partial match
   const found = Object.keys(SKILL_TASK_MAP).find(
-    (k) => skillName.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(skillName.toLowerCase())
+    (key) => skillsMatch(key, skillName)
   );
   if (found && SKILL_TASK_MAP[found]) return SKILL_TASK_MAP[found].tasks;
 

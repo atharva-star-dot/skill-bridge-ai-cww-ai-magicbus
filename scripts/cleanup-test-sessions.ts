@@ -1,45 +1,54 @@
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
+import {
+  buildTestEmailWhere,
+  parseTestEmailDomain,
+} from './cleanup-test-sessions-utils';
 
 const prisma = new PrismaClient();
 
-async function cleanupTestSessions() {
-  console.log('Searching for test users/profiles starting with "test-" or test emails...');
-
+export async function cleanupTestSessions(): Promise<void> {
   try {
-    // Delete test profiles (cascades to gap reports, plans, reviews, interview sessions and answers)
+    const domain = parseTestEmailDomain(process.env.TEST_EMAIL_DOMAIN);
+    const where = buildTestEmailWhere(domain);
+    console.log(`Searching only for profiles ending in @${domain}...`);
+
     const testProfiles = await prisma.profile.findMany({
-      where: {
-        OR: [
-          { id: { startsWith: 'test-' } },
-          { email: { contains: 'test' } },
-        ],
-      },
+      where,
       select: { id: true, email: true, targetRole: true },
     });
 
     console.log(`Found ${testProfiles.length} test profile(s) to remove.`);
 
     if (testProfiles.length > 0) {
-      const deleteResult = await prisma.profile.deleteMany({
-        where: {
-          OR: [
-            { id: { startsWith: 'test-' } },
-            { email: { contains: 'test' } },
-          ],
-        },
-      });
-      console.log(`✓ Deleted ${deleteResult.count} test profile(s) and all cascading records.`);
+      const deleteResult = await prisma.profile.deleteMany({ where });
+      console.log(
+        `Deleted ${deleteResult.count} test profile(s) and all cascading records.`
+      );
     } else {
-      console.log('Database is clean. No test profiles found.');
+      console.log('No profiles matched TEST_EMAIL_DOMAIN.');
     }
-  } catch (err: any) {
-    console.error('Cleanup warning:', err?.message);
+  } catch (error: unknown) {
+    console.error(
+      'Cleanup failed:',
+      error instanceof Error ? error.message : 'UnknownError'
+    );
+    process.exitCode = 1;
   } finally {
     await prisma.$disconnect();
   }
 }
 
-cleanupTestSessions().catch((err) => {
-  console.error('Failed to cleanup test sessions:', err);
-  process.exit(1);
-});
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  cleanupTestSessions().catch((error: unknown) => {
+    console.error(
+      'Cleanup shutdown failed:',
+      error instanceof Error ? error.name : 'UnknownError'
+    );
+    process.exitCode = 1;
+  });
+}

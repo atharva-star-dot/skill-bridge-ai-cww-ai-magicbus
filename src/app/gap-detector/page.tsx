@@ -21,6 +21,8 @@ import { ReadinessGauge } from '@/components/shared/ReadinessGauge';
 import { SkillTagInput } from '@/components/shared/SkillTagInput';
 import { GapDetectorOutput } from '@/lib/schemas/gap-detector.schema';
 
+type GapDetectorReport = GapDetectorOutput & { persisted?: boolean };
+
 export default function GapDetectorPage() {
   const router = useRouter();
   const [targetRole, setTargetRole] = useState<string>('Junior Frontend Developer');
@@ -28,7 +30,7 @@ export default function GapDetectorPage() {
   const [resumeText, setResumeText] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [report, setReport] = useState<GapDetectorOutput | null>(null);
+  const [report, setReport] = useState<GapDetectorReport | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<'All' | 'High' | 'Medium' | 'Low'>('All');
   const [isEditingInputs, setIsEditingInputs] = useState<boolean>(false);
 
@@ -77,7 +79,7 @@ export default function GapDetectorPage() {
         throw new Error(errorData.error || `Server responded with status ${res.status}`);
       }
 
-      const data: GapDetectorOutput = await res.json();
+      const data: GapDetectorReport = await res.json();
       setReport(data);
       setIsEditingInputs(false);
 
@@ -258,6 +260,17 @@ export default function GapDetectorPage() {
       {/* Main Results View */}
       {report && !isLoading && (
         <div className="space-y-8 animate-in fade-in duration-300">
+          {report.persisted === false && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-300"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                Your report is ready, but it could not be saved. You can still review it here.
+              </p>
+            </div>
+          )}
           {/* Top Hero Banner: Score Gauge + Target Role + Quick Actions */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 rounded-2xl border bg-gradient-to-br from-card via-card to-primary/5 shadow-sm">
             {/* Left Column: Visual Readiness Gauge */}

@@ -26,7 +26,6 @@ DO $$ BEGIN
     ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS current_skills TEXT NOT NULL DEFAULT '[]';
     ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS readiness_score INTEGER;
     ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
-EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
 -- 2. Target Roles Table (Curated reference roles)

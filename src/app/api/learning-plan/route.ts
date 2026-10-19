@@ -6,6 +6,7 @@ import { LearningPlanInputSchema, LearningPlanOutputSchema, LearningPlanOutput }
 import { buildLearningPlanPrompt } from '@/lib/ai/prompts/learning-plan.prompt';
 import { generateFallbackLearningPlan } from '@/lib/ai/fallbacks/learning-plan.fallback';
 import type { MissingSkillItem } from '@/lib/schemas/gap-detector.schema';
+import { enforceAiRateLimit } from '@/lib/ai/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -35,6 +36,8 @@ export async function POST(req: NextRequest) {
     }
 
     const { durationWeeks } = validation.data;
+    const rateLimitResponse = await enforceAiRateLimit(userId);
+    if (rateLimitResponse) return rateLimitResponse;
 
     // 1. Fetch current profile to know the ACTIVE role
     const profile = await prisma.profile.findUnique({

@@ -111,3 +111,7 @@ directories captured above]
 |-----------|------------|-------------------------------------|
 | [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
 | [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+
+/speckit.plan
+Tech context: Next.js 14 App Router, TypeScript, Prisma 5 (postgresql, directUrl), Supabase Auth via @supabase/ssr, Zod, Vitest for new unit tests (add it as a dev dependency), Vercel deployment (region bom1, maxDuration 30s).
+Constraints: no new paid infrastructure; schema source of truth = supabase/*.sql, and Prisma schema must mirror it exactly (add the new tables/uniques to both); migrations must be idempotent and ship as supabase/04_hardening.sql, also appended to 00_RUN_ALL.sql; keep all 001 API response shapes backward compatible (only additive fields such as persisted); respect .specify/memory/constitution.md. Produce: data-model.md changes, a contract delta per route, and a research.md note for the pooler/pgbouncer settings.

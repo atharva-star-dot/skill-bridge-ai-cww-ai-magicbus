@@ -22,6 +22,7 @@ model Profile {
   learningPlans     LearningPlan[]
   resumeReviews     ResumeReview[]
   interviewSessions InterviewSession[]
+  aiUsage           AiUsage[]
 
   @@map("profiles")
 }
@@ -139,8 +140,19 @@ model InterviewAnswer {
 
   interviewSession   InterviewSession @relation(fields: [interviewSessionId], references: [id], onDelete: Cascade)
 
-  @@index([interviewSessionId, questionIndex])
+  @@unique([interviewSessionId, questionIndex], map: "interview_answers_session_question_key")
   @@map("interview_answers")
+}
+
+model AiUsage {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  profile   Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt], map: "ai_usage_user_id_created_at_idx")
+  @@map("ai_usage")
 }
 
 model JobRole {

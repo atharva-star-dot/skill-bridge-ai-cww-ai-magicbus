@@ -7,6 +7,7 @@ import { LogIn, Sparkles, AlertCircle, CheckCircle2, Loader2 } from 'lucide-reac
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { createClient } from '@/lib/supabase/client';
+import { getSafeRedirectPath } from '@/lib/utils/redirect';
 
 function LoginForm() {
   const router = useRouter();
@@ -41,19 +42,15 @@ function LoginForm() {
         return;
       }
 
-      // Check where to redirect
-      if (nextPath) {
-        router.push(nextPath);
-      } else {
-        // Query /api/session to see if user already selected a target role
-        const sessionRes = await fetch('/api/session', { cache: 'no-store' });
-        const sessionData = await sessionRes.json();
-        if (sessionData && sessionData.targetRole) {
-          router.push('/dashboard');
-        } else {
-          router.push('/onboarding');
-        }
+      const safeNextPath = getSafeRedirectPath(nextPath, window.location.origin);
+      if (safeNextPath) {
+        router.push(safeNextPath);
+        return;
       }
+
+      const sessionRes = await fetch('/api/session', { cache: 'no-store' });
+      const sessionData = await sessionRes.json();
+      router.push(sessionData?.targetRole ? '/dashboard' : '/onboarding');
     } catch (err: any) {
       setError(err?.message || 'An unexpected error occurred during login.');
       setLoading(false);

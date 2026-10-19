@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { prisma } from '@/lib/db';
+import { safeJsonParse } from '@/lib/utils/safe-json';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,34 +63,34 @@ export async function GET() {
         email: user.email,
         fullName: profile?.fullName || user.user_metadata?.full_name || null,
         targetRole: profile?.targetRole || null,
-        currentSkills: profile?.currentSkills ? JSON.parse(profile.currentSkills) : [],
+        currentSkills: safeJsonParse(profile?.currentSkills, []),
         readinessScore: profile?.readinessScore ?? null,
       },
       gapReports: gapReports.map((r) => ({
         ...r,
-        matchedSkills: JSON.parse(r.matchedSkills || '[]'),
-        missingSkills: JSON.parse(r.missingSkills || '[]'),
+        matchedSkills: safeJsonParse(r.matchedSkills, []),
+        missingSkills: safeJsonParse(r.missingSkills, []),
       })),
       learningPlans: learningPlans.map((p) => ({
         ...p,
         tasks: p.tasks.map((t) => ({
           ...t,
-          resources: JSON.parse(t.resources || '[]'),
+          resources: safeJsonParse(t.resources, []),
         })),
       })),
       resumeReviews: resumeReviews.map((rr) => ({
         ...rr,
-        strengths: JSON.parse(rr.strengths || '[]'),
-        weaknesses: JSON.parse(rr.weaknesses || '[]'),
-        missingKeywords: JSON.parse(rr.missingKeywords || '[]'),
-        bulletRewrites: JSON.parse(rr.bulletRewrites || '[]'),
+        strengths: safeJsonParse(rr.strengths, []),
+        weaknesses: safeJsonParse(rr.weaknesses, []),
+        missingKeywords: safeJsonParse(rr.missingKeywords, []),
+        bulletRewrites: safeJsonParse(rr.bulletRewrites, []),
       })),
       interviewSessions: interviewSessions.map((s) => ({
         ...s,
-        summary: s.summary ? JSON.parse(s.summary) : null,
+        summary: safeJsonParse(s.summary, null),
         answers: s.answers.map((a) => ({
           ...a,
-          feedback: a.feedback ? JSON.parse(a.feedback) : null,
+          feedback: safeJsonParse(a.feedback, null),
         })),
       })),
     };
@@ -99,8 +101,11 @@ export async function GET() {
         'Cache-Control': 'no-store',
       },
     });
-  } catch (err: any) {
-    console.error('[MyData:GET] Error exporting data:', err?.message);
+  } catch (err: unknown) {
+    console.error(
+      '[MyData:GET] Export failed:',
+      err instanceof Error ? err.name : 'UnknownError'
+    );
     return NextResponse.json({ error: 'Failed to export user data' }, { status: 500 });
   }
 }
@@ -122,20 +127,21 @@ export async function DELETE() {
     }
 
     const userId = user.id;
+    const admin = createAdminClient();
 
-    // Delete profile (Prisma cascade will delete gap reports, plans, tasks, resume reviews, interview sessions and answers)
-    await prisma.profile.delete({
-      where: { id: userId },
-    }).catch(() => {
-      // Profile may not exist in DB yet
-    });
+    await prisma.profile.deleteMany({ where: { id: userId } });
 
-    // Also sign user out
-    await supabase.auth.signOut();
+    const { error: authDeleteError } = await admin.auth.admin.deleteUser(userId);
+    if (authDeleteError) {
+      throw new Error('Supabase Auth account deletion failed.');
+    }
 
     return NextResponse.json({ success: true, message: 'All user data successfully deleted' });
-  } catch (err: any) {
-    console.error('[MyData:DELETE] Error deleting user data:', err?.message);
+  } catch (err: unknown) {
+    console.error(
+      '[MyData:DELETE] Account deletion failed:',
+      err instanceof Error ? err.name : 'UnknownError'
+    );
     return NextResponse.json({ error: 'Failed to delete user account' }, { status: 500 });
   }
 }

@@ -8,9 +8,14 @@ import {
   QuestionType,
   PerQuestionScoreItem,
 } from '@/lib/schemas/interview.schema';
-import { buildSummaryPrompt } from '@/lib/ai/prompts/interview.prompt';
+import {
+  buildSummaryPrompt,
+  INTERVIEW_SUMMARY_SYSTEM_INSTRUCTION,
+} from '@/lib/ai/prompts/interview.prompt';
 import { generateSummaryFallback } from '@/lib/ai/fallbacks/interview.fallback';
+import { hasFiveScoredAnswers } from '@/lib/interview/completion';
 import { z } from 'zod';
+import { enforceAiRateLimit } from '@/lib/ai/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -65,8 +70,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Interview session not found or invalid' }, { status: 404 });
     }
 
+    if (!hasFiveScoredAnswers(session.answers)) {
+      return NextResponse.json(
+        { error: 'Interview session is incomplete' },
+        { status: 409 }
+      );
+    }
+    const rateLimitResponse = await enforceAiRateLimit(userId);
+    if (rateLimitResponse) return rateLimitResponse;
+
+    const scoredAnswers = session.answers.filter(
+      (answer): answer is typeof answer & { score: number } => answer.score !== null
+    );
+
     // Prepare perQuestionScores
-    const perQuestionScores: PerQuestionScoreItem[] = session.answers.map((a) => {
+    const perQuestionScores: PerQuestionScoreItem[] = scoredAnswers.map((a) => {
       let parsedFeedback = '';
       try {
         if (a.feedback) {
@@ -84,7 +102,7 @@ export async function POST(req: NextRequest) {
         questionType: a.questionType as QuestionType,
         questionText: a.questionText,
         userAnswer: a.userAnswer,
-        score: a.score ?? 5,
+        score: Math.max(1, Math.min(10, Math.round(a.score))),
         feedback: parsedFeedback,
         sampleAnswer: a.sampleAnswer || undefined,
       };
@@ -123,15 +141,19 @@ export async function POST(req: NextRequest) {
           `[Interview:Summary] Generating summary via Gemini (${getActiveModel()}) for role: ${session.targetRole}`
         );
         const prompt = buildSummaryPrompt(session.targetRole, perQuestionScores, missingSkills);
-        const aiResult = await executeGeminiWithRetry(prompt, AISummaryResponseSchema);
+        const aiResult = await executeGeminiWithRetry(
+          prompt,
+          AISummaryResponseSchema,
+          INTERVIEW_SUMMARY_SYSTEM_INSTRUCTION
+        );
         const durationMs = Math.round(performance.now() - startTime);
         console.info(`[Interview:Summary] AI summary completed in ${durationMs}ms`);
         summaryData = { ...aiResult, source: 'ai' };
       } catch (aiErr: any) {
         const durationMs = Math.round(performance.now() - startTime);
         console.warn(
-          `[Interview:Summary] Gemini summary failed after ${durationMs}ms, using fallback:`,
-          aiErr?.message
+          `[Interview:Summary] Gemini summary failed after ${durationMs}ms; using fallback.`,
+          aiErr instanceof Error ? aiErr.name : 'UnknownError'
         );
         const fallback = generateSummaryFallback(
           session.targetRole,
@@ -187,8 +209,11 @@ export async function POST(req: NextRequest) {
         headers: { 'Cache-Control': 'no-store' },
       }
     );
-  } catch (err: any) {
-    console.error('[Interview] Summary POST error:', err);
+  } catch (err: unknown) {
+    console.error(
+      '[Interview] Summary POST error:',
+      err instanceof Error ? err.name : 'UnknownError'
+    );
     return NextResponse.json(
       { error: 'Failed to generate interview summary' },
       { status: 500 }

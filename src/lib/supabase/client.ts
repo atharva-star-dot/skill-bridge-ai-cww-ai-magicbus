@@ -1,14 +1,11 @@
 import { createBrowserClient } from '@supabase/ssr';
+import { getSupabasePublicConfig } from './config';
 
 /**
  * Browser-side Supabase client singleton.
  * Uses NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.
  */
 export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-      'placeholder-anon-key'
-  );
+  const { url, key } = getSupabasePublicConfig();
+  return createBrowserClient(url, key);
 }

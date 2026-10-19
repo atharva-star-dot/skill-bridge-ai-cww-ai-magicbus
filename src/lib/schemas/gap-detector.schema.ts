@@ -11,7 +11,7 @@ export const GapDetectorInputSchema = z.object({
   sessionId: z.string().optional(),
   userId: z.string().optional(),
   targetRole: z.string().min(2, 'Target role must be at least 2 characters').max(100),
-  currentSkills: z.array(z.string()),
+  currentSkills: z.array(z.string().min(1).max(60)).max(50),
   resumeText: z.string().max(25000).optional(),
 });
 

@@ -14,6 +14,7 @@ prisma/dev.db
 prisma/dev.db-journal
 *.db
 *.db-journal
+*.tsbuildinfo
 
 # Environment variables & secrets (NEVER commit keys)
 .env

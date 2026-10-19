@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createClient } from '@/lib/supabase/server';
+import { hasFiveScoredAnswers } from '@/lib/interview/completion';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,6 +67,7 @@ export async function GET(req: NextRequest) {
 
     const formatSession = (s: any) => {
       if (!s) return null;
+      const isCompleted = hasFiveScoredAnswers(s.answers);
       let summaryObj = null;
       if (s.summary) {
         try {
@@ -76,7 +78,7 @@ export async function GET(req: NextRequest) {
       return {
         id: s.id,
         targetRole: s.targetRole,
-        status: s.status,
+        status: isCompleted ? 'completed' : 'in_progress',
         currentQuestionIndex: s.currentQuestionIndex,
         summary: summaryObj,
         createdAt: s.createdAt.toISOString(),
@@ -107,14 +109,21 @@ export async function GET(req: NextRequest) {
       {
         targetRole,
         activeSession: formatSession(inProgressSession),
-        latestCompletedSession: formatSession(completedSession),
+        latestCompletedSession: formatSession(
+          completedSession && hasFiveScoredAnswers(completedSession.answers)
+            ? completedSession
+            : null
+        ),
       },
       {
         headers: { 'Cache-Control': 'no-store' },
       }
     );
-  } catch (err: any) {
-    console.error('[Interview] Active GET error:', err);
+  } catch (err: unknown) {
+    console.error(
+      '[Interview] Active GET error:',
+      err instanceof Error ? err.name : 'UnknownError'
+    );
     return NextResponse.json({ error: 'Failed to fetch interview session' }, { status: 500 });
   }
 }

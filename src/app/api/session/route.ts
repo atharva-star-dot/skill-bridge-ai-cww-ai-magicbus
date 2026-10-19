@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createClient } from '@/lib/supabase/server';
+import { SessionUpdateSchema } from '@/lib/schemas/session.schema';
+import { SEED_ROLES } from '@/data/seed-roles';
+import { computeReadiness } from '@/lib/scoring/compute-readiness';
+import { textContainsSkill } from '@/lib/scoring/skill-matching';
+import { safeJsonParse } from '@/lib/utils/safe-json';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,10 +65,7 @@ export async function GET(_req: NextRequest) {
       include: { tasks: true },
     });
 
-    let parsedSkills: string[] = [];
-    try {
-      parsedSkills = JSON.parse(profile.currentSkills);
-    } catch {}
+    const parsedSkills = safeJsonParse<string[]>(profile.currentSkills, []);
 
     const activePlanSummary = activePlan
       ? {
@@ -76,51 +78,59 @@ export async function GET(_req: NextRequest) {
         }
       : null;
 
-    // Readiness score calculation
     let readinessScore: number | null = null;
     if (activeReport) {
-      const baseScore = activeReport.readinessScore;
-      if (activePlan && activePlan.tasks.length > 0) {
-        const completedTasks = activePlan.tasks.filter((t) => t.isCompleted);
-        if (completedTasks.length > 0) {
-          const missingPriorityMap = new Map<string, number>();
-          try {
-            const missingItems: Array<{ name: string; priority: string }> = JSON.parse(
-              activeReport.missingSkills || '[]'
-            );
-            for (const item of missingItems) {
-              const w = item.priority === 'High' ? 3 : item.priority === 'Medium' ? 2 : 1;
-              missingPriorityMap.set(item.name.toLowerCase(), w);
-            }
-          } catch {}
-
-          let totalWeight = 0;
-          let completedWeight = 0;
-          for (const t of activePlan.tasks) {
-            let taskWeight = 2;
-            Array.from(missingPriorityMap.entries()).forEach(([skillName, w]) => {
-              if (
-                t.title.toLowerCase().includes(skillName) ||
-                t.description.toLowerCase().includes(skillName)
-              ) {
-                taskWeight = Math.max(taskWeight, w);
-              }
-            });
-            totalWeight += taskWeight;
-            if (t.isCompleted) completedWeight += taskWeight;
+      const matchedSkills = safeJsonParse<string[]>(activeReport.matchedSkills, []);
+      const missingSkills = safeJsonParse<
+        Array<{ name: string; priority: 'High' | 'Medium' | 'Low' }>
+      >(activeReport.missingSkills, []);
+      const seedRole = SEED_ROLES.find(
+        (role) =>
+          role.title.toLowerCase() === currentRole.toLowerCase() ||
+          role.slug === currentRole.toLowerCase()
+      );
+      const benchmark = seedRole
+        ? {
+            requiredSkills: seedRole.requiredSkills,
+            goodToHaveSkills: seedRole.goodToHaveSkills,
           }
-          const weightedProgress =
-            totalWeight > 0
-              ? completedWeight / totalWeight
-              : completedTasks.length / activePlan.tasks.length;
-          const potentialGain = 95 - baseScore;
-          readinessScore = Math.min(95, Math.round(baseScore + potentialGain * weightedProgress));
-        } else {
-          readinessScore = baseScore;
+        : {
+            requiredSkills: [...matchedSkills, ...missingSkills.map((skill) => skill.name)],
+            goodToHaveSkills: [],
+          };
+
+      let taskProgress:
+        | { completedWeight: number; totalWeight: number }
+        | undefined;
+      if (activePlan && activePlan.tasks.length > 0) {
+        const missingPriorityMap = new Map(
+          missingSkills.map((skill) => [
+            skill.name.toLowerCase(),
+            skill.priority === 'High' ? 3 : skill.priority === 'Medium' ? 2 : 1,
+          ])
+        );
+        let totalWeight = 0;
+        let completedWeight = 0;
+
+        for (const task of activePlan.tasks) {
+          let weight = 2;
+          for (const [skillName, priorityWeight] of Array.from(missingPriorityMap.entries())) {
+            if (textContainsSkill(task.title, skillName) || textContainsSkill(task.description, skillName)) {
+              weight = Math.max(weight, priorityWeight);
+            }
+          }
+          totalWeight += weight;
+          if (task.isCompleted) completedWeight += weight;
         }
-      } else {
-        readinessScore = baseScore;
+        taskProgress = { completedWeight, totalWeight };
       }
+
+      readinessScore = computeReadiness({
+        benchmark,
+        matchedSkills,
+        missingSkills,
+        taskProgress,
+      });
     }
 
     // Find latest resume review strictly for THIS active role
@@ -200,23 +210,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+    }
+    const validation = SessionUpdateSchema.safeParse(body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: 'Invalid request', details: validation.error.format() },
+        { status: 400 }
+      );
+    }
+
     const userId = user.id;
-    const body = await req.json();
-    const { targetRole, currentSkills, readinessScore } = body;
+    const { targetRole, currentSkills, readinessScore } = validation.data;
 
     const profile = await prisma.profile.upsert({
       where: { id: userId },
       update: {
-        ...(targetRole ? { targetRole } : {}),
-        ...(currentSkills ? { currentSkills: JSON.stringify(currentSkills) } : {}),
+        ...(targetRole !== undefined ? { targetRole } : {}),
+        ...(currentSkills !== undefined ? { currentSkills: JSON.stringify(currentSkills) } : {}),
         ...(typeof readinessScore === 'number' ? { readinessScore } : {}),
       },
       create: {
         id: userId,
         email: user.email,
         fullName: user.user_metadata?.full_name || null,
-        targetRole: targetRole || null,
-        currentSkills: JSON.stringify(currentSkills || []),
+        targetRole: targetRole ?? null,
+        currentSkills: JSON.stringify(currentSkills ?? []),
         readinessScore: typeof readinessScore === 'number' ? readinessScore : 0,
       },
     });
@@ -233,8 +256,11 @@ export async function POST(req: NextRequest) {
         headers: { 'Cache-Control': 'no-store' },
       }
     );
-  } catch (err: any) {
-    console.error('Session POST error:', err);
+  } catch (err: unknown) {
+    console.error(
+      'Session POST error:',
+      err instanceof Error ? err.name : 'UnknownError'
+    );
     return NextResponse.json({ error: 'Failed to update session' }, { status: 500 });
   }
 }

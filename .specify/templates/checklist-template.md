@@ -43,3 +43,12 @@
 - Add comments or findings inline
 - Link to relevant resources or documentation
 - Items are numbered sequentially for easy reference
+ /speckit.implement
+Implement tasks.md phase by phase. Rules:
+1. Before editing any file, read it in full. Make minimal diffs; do not reformat unrelated code.
+2. After each phase run: npx prisma generate && npx tsc --noEmit && npm run lint. Fix every error before moving on, and mark the task done in tasks.md.
+3. Never print, hardcode or commit secrets. Service-role key is server-only; never import it in client code or anything under NEXT_PUBLIC_.
+4. Never log resume text, interview answers or raw error objects containing user data.
+5. If a task conflicts with the spec or the constitution, stop and tell me instead of improvising.
+6. For SQL changes: write idempotent statements, do not wrap them in swallow-all exception blocks, and show me the migration before applying anything to a live database.
+7. At the end output: a list of changed files, test results, any spec criteria not yet met, and manual steps I must do myself (apply 04_hardening.sql in the Supabase SQL editor, set env vars in Vercel).

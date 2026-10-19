@@ -1,18 +1,18 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { getSupabasePublicConfig } from './config';
 
 /**
  * Server-side Supabase client for Route Handlers and Server Components.
  * Reads and writes session cookies securely.
  */
 export function createClient() {
+  const { url, key } = getSupabasePublicConfig();
   const cookieStore = cookies();
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-      'placeholder-anon-key',
+    url,
+    key,
     {
       cookies: {
         getAll() {

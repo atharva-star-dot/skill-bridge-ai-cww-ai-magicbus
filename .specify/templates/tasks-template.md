@@ -250,3 +250,5 @@ With multiple developers:
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
 - Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence
+ /speckit.tasks
+Generate tasks grouped by user story, ordered P0 → P1 → P2. Each task names the exact file(s). Mark independent tasks [P]. Put test tasks before implementation tasks for stories 1, 2, 5, 7, 8, 9, 10, 11. Add a final phase: README/.env.example, then a full verification run (prisma validate, prisma generate, tsc --noEmit, next lint, vitest, next build).

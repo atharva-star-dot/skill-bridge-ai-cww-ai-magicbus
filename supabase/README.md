@@ -1,72 +1,37 @@
-# 🗄️ Supabase Database Setup & Migration Guide
+# Supabase database setup
 
-This directory contains idempotent SQL files for initializing and configuring the Supabase PostgreSQL database for **Skill Bridge AI**.
+The SQL files in this directory are the database schema source of truth. `prisma/schema.prisma` mirrors the schema for Prisma Client generation and validation; do not use Prisma migrations or `prisma db push` to manage the Supabase database.
 
----
+## SQL files and run order
 
-## 📋 File Overview & Run Order
+| File | Purpose |
+| --- | --- |
+| `00_RUN_ALL.sql` | Ordered setup entry point: schema, Auth/security setup, seed data, then hardening |
+| `01_schema.sql` | Core application tables and indexes |
+| `02_auth_and_security.sql` | Profile/Auth integration, row-level security, and related grants/policies |
+| `03_seed.sql` | Static role and job reference data |
+| `04_hardening.sql` | Profile backfill, profile-owned cascading foreign keys, interview-answer uniqueness, AI usage quota table, and database functions used for atomic limits |
 
-Run these scripts in the **Supabase Dashboard → SQL Editor** in the following order:
+For a new database, review and run `00_RUN_ALL.sql` in the Supabase Dashboard SQL Editor. For a database that already has the earlier schema, review `04_hardening.sql` and apply it in the SQL Editor. Test schema changes on a disposable/development project before applying them to production. The migration is designed to be idempotent; data conflicts that prevent safe constraints must surface as errors rather than being silently ignored.
 
-| File | Purpose | Notes |
-|---|---|---|
-| `00_RUN_ALL.sql` | **All-in-one execution** | Concatenation of `01`, `02`, and `03` in exact order. Safe to run in one click. |
-| `01_schema.sql` | Core schema DDL | Creates tables, indexes, and cascading foreign keys referencing `auth.users(id)`. |
-| `02_auth_and_security.sql` | Auth triggers & RLS | Creates `profiles` table, auto-creates profile on auth signup, enables RLS, grants access. |
-| `03_seed.sql` | Curated production data | Inserts 25 entry-level roles and 40 verified Indian tech jobs (`ON CONFLICT DO NOTHING`). |
+The application does not apply SQL migrations automatically. Applying the hardening migration is required before account-data cascades, AI quotas, and the interview-session limit can work as intended.
 
-> **Recommended**: Open `00_RUN_ALL.sql`, paste into the Supabase SQL Editor, and click **Run**.
+## Verify setup
 
----
-
-## 🔍 Verification Query
-
-After executing the SQL scripts, run this verification query in the SQL Editor to ensure all tables exist and data is populated:
+List the public tables:
 
 ```sql
--- 1. Verify all public tables exist
-SELECT
-    table_name
+SELECT table_name
 FROM information_schema.tables
 WHERE table_schema = 'public'
 ORDER BY table_name;
+```
 
--- 2. Count seeded roles and jobs
-SELECT
-    (SELECT COUNT(*) FROM public.target_roles) AS total_target_roles,  -- Expected: 25
-    (SELECT COUNT(*) FROM public.job_roles) AS total_job_roles;        -- Expected: 40
+Check row-level security status:
 
--- 3. Verify Row Level Security is active
-SELECT
-    schemaname,
-    tablename,
-    rowsecurity
+```sql
+SELECT schemaname, tablename, rowsecurity
 FROM pg_tables
 WHERE schemaname = 'public'
 ORDER BY tablename;
-```
-
----
-
-## 🔄 How to Reset the Database
-
-If you need to wipe and reset all application data:
-
-```sql
--- DANGER: Drops all application tables and data. Does NOT delete auth.users.
-DROP TABLE IF EXISTS public.interview_answers CASCADE;
-DROP TABLE IF EXISTS public.interview_sessions CASCADE;
-DROP TABLE IF EXISTS public.plan_tasks CASCADE;
-DROP TABLE IF EXISTS public.learning_plans CASCADE;
-DROP TABLE IF EXISTS public.resume_reviews CASCADE;
-DROP TABLE IF EXISTS public.skill_gap_reports CASCADE;
-DROP TABLE IF EXISTS public.profiles CASCADE;
-DROP TABLE IF EXISTS public.target_roles CASCADE;
-DROP TABLE IF EXISTS public.job_roles CASCADE;
-
--- Drop trigger
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-DROP FUNCTION IF EXISTS public.handle_new_user();
-
--- After running the reset above, simply re-run 00_RUN_ALL.sql
 ```

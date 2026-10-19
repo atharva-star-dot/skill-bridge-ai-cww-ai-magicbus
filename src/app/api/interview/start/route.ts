@@ -9,6 +9,7 @@ import {
 } from '@/lib/schemas/interview.schema';
 import { buildGenerateQuestionsPrompt } from '@/lib/ai/prompts/interview.prompt';
 import { getFallbackQuestions } from '@/lib/ai/fallbacks/interview.fallback';
+import { enforceAiRateLimit } from '@/lib/ai/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -37,6 +38,8 @@ export async function POST(req: NextRequest) {
     }
 
     const { targetRole } = validation.data;
+    const rateLimitResponse = await enforceAiRateLimit(userId);
+    if (rateLimitResponse) return rateLimitResponse;
 
     // Ensure profile exists in DB
     await prisma.profile.upsert({
@@ -105,26 +108,45 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Create InterviewSession and pre-create the 5 InterviewAnswer slots
-    const interviewSession = await prisma.interviewSession.create({
-      data: {
-        userId,
-        targetRole,
-        status: 'in_progress',
-        currentQuestionIndex: 0,
-        answers: {
-          create: questionsResult.questions.map((q) => ({
-            questionIndex: q.questionIndex,
-            questionType: q.questionType,
-            questionText: q.questionText,
-          })),
+    const sessionCreation = await prisma.$transaction(async (transaction) => {
+      const [capacity] = await transaction.$queryRaw<Array<{ allowed: boolean }>>`
+        SELECT public.can_start_interview(${userId}::uuid, 3) AS allowed
+      `;
+
+      if (!capacity?.allowed) return { atCapacity: true as const };
+
+      const interviewSession = await transaction.interviewSession.create({
+        data: {
+          userId,
+          targetRole,
+          status: 'in_progress',
+          currentQuestionIndex: 0,
+          answers: {
+            create: questionsResult.questions.map((q) => ({
+              questionIndex: q.questionIndex,
+              questionType: q.questionType,
+              questionText: q.questionText,
+            })),
+          },
         },
-      },
-      include: {
-        answers: {
-          orderBy: { questionIndex: 'asc' },
+        include: {
+          answers: {
+            orderBy: { questionIndex: 'asc' },
+          },
         },
-      },
+      });
+
+      return { atCapacity: false as const, interviewSession };
     });
+
+    if (sessionCreation.atCapacity) {
+      return NextResponse.json(
+        { error: 'Maximum number of in-progress interviews reached' },
+        { status: 409 }
+      );
+    }
+
+    const interviewSession = sessionCreation.interviewSession;
 
     return NextResponse.json(
       {

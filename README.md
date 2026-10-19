@@ -1,262 +1,121 @@
-# 🎯 Skill Bridge AI
+# Skill Bridge AI
 
-**An AI-powered career accelerator for Indian freshers and college students.**  
-Built with Next.js 14, TypeScript, Tailwind CSS, Prisma, and the Google Gemini API.
+Skill Bridge AI helps authenticated users compare their skills with a target role, review resume content, build learning plans, and practice interview questions. It is built with Next.js 14 App Router, TypeScript, Prisma, Supabase Auth and Postgres, and optional Gemini AI.
 
----
+## Architecture
 
-## ✨ Features
+- **Authentication:** Supabase Auth. Application data is associated with the authenticated user's profile; this is not a guest/localStorage authentication flow.
+- **Database:** Supabase Postgres, accessed at runtime through Prisma.
+- **Schema source of truth:** SQL files in `supabase/`. `prisma/schema.prisma` mirrors that schema for Prisma Client generation and validation; Prisma migrations are not used.
+- **AI:** Gemini-backed routes use bounded requests, configured model fallbacks, deterministic fallbacks, and per-user database-backed quotas. AI endpoints allow 20 calls per user per rolling hour by default.
+- **Transient browser state:** Resume text awaiting gap analysis may be held in `sessionStorage` for the current browser session. Interview and user data are stored server-side.
 
-| Feature | Route | Description |
-|---|---|---|
-| **Skill Gap Detector** | `/gap-detector` | AI-powered 0–100 readiness score and prioritised missing skills |
-| **Personal Learning Plan** | `/learning-plan` | Week-by-week curriculum (2 / 4 / 8 weeks) with checkboxes and progress |
-| **ATS Resume Checker** | `/resume-checker` | ATS match score, keyword gaps, and 5 XYZ-formula bullet rewrites |
-| **AI Mock Interviews** | `/interviews` | 5-question sessions (3 technical + 1 scenario + 1 behavioral) scored 1–10 |
-| **Job Matches** | `/job-matches` | 40 curated entry-level roles ranked by skill match % |
-| **Dashboard** | `/dashboard` | Unified view of readiness score, plan progress, and latest scores |
+## Requirements
 
-All AI features fall back to deterministic logic when no API key is set, so the app never breaks.
+- Node.js 20 or later
+- npm
+- A Supabase project for Auth and Postgres
+- A Gemini API key for Gemini-powered responses (optional; deterministic fallbacks are available)
 
----
+## Local setup
 
-## 🏗️ Architecture
+1. Install dependencies:
 
-```
-src/
-├── app/                     # Next.js App Router pages & API routes
-│   ├── api/
-│   │   ├── gap-detector/    # POST – skill gap analysis
-│   │   ├── health/          # GET  – deployment health check
-│   │   ├── interview/       # start · answer · summary · active
-│   │   ├── learning-plan/   # POST · saved · task/[taskId]
-│   │   ├── resume-checker/  # POST – ATS analysis
-│   │   └── session/         # GET  – guest session data
-│   ├── dashboard/           # Unified career dashboard
-│   ├── gap-detector/        # Skill gap report
-│   ├── interviews/          # Mock interview flow
-│   ├── job-matches/         # Curated job matches
-│   ├── learning-plan/       # Week-by-week roadmap
-│   ├── onboarding/          # Role + skills entry
-│   └── resume-checker/      # ATS resume evaluation
-├── components/
-│   ├── features/            # Feature-specific components
-│   │   ├── JobMatchesView.tsx
-│   │   ├── LearningRoadmapView.tsx
-│   │   └── ResumeReviewView.tsx
-│   ├── shared/              # Reusable layout + utility components
-│   │   ├── EmptyState.tsx
-│   │   ├── ErrorAlert.tsx
-│   │   ├── Footer.tsx
-│   │   ├── Navbar.tsx
-│   │   ├── ReadinessGauge.tsx
-│   │   └── SkillTagInput.tsx
-│   └── ui/                  # shadcn/ui primitives
-├── data/
-│   ├── seed-jobs.ts         # 40 curated entry-level Indian tech jobs
-│   └── seed-roles.ts        # 25 popular fresher roles
-├── lib/
-│   ├── ai/
-│   │   ├── fallbacks/       # Deterministic fallbacks (no API key needed)
-│   │   ├── gemini.ts        # Gemini client with retry + 20-second timeout
-│   │   └── prompts/         # Prompt templates per feature
-│   ├── schemas/             # Zod validation schemas per feature
-│   ├── storage/
-│   │   └── session.ts       # localStorage session helper
-│   └── db.ts                # Prisma client singleton
-├── scripts/
-│   ├── cleanup-test-sessions.ts  # Delete test-* sessions before production launch
-│   └── seed.ts              # Database seeder
-└── prisma/
-    └── schema.prisma        # Database schema (9 models)
-```
+   ```bash
+   npm install
+   ```
 
----
+2. Copy `.env.example` to `.env.local` and fill in the values from your Supabase and Google AI projects. Keep `.env.local` private and out of version control.
 
-## 🚀 Quick Start (Windows PowerShell)
+   - `DATABASE_URL` should use the Supabase transaction pooler on port `6543`, with `pgbouncer=true&connection_limit=1`.
+   - `DIRECT_URL` should use the direct database connection on port `5432`.
+   - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are public client configuration.
+   - `SUPABASE_SERVICE_ROLE_KEY` is server-only. Do not expose it to browser code or give it a `NEXT_PUBLIC_` prefix.
+   - `GEMINI_FALLBACK_MODELS` is an optional comma-separated list of verified model IDs.
+   - `TEST_EMAIL_DOMAIN` is required by the test-session cleanup script and should be a domain reserved for test accounts.
 
-### Prerequisites
+3. Set up the database schema in Supabase:
 
-- **Node.js 20+** — [nodejs.org](https://nodejs.org)
-- **Git** — [git-scm.com](https://git-scm.com)
-- **Google Gemini API key** (free tier) — [aistudio.google.com](https://aistudio.google.com)
+   - For a new database, review and run `supabase/00_RUN_ALL.sql` in the Supabase SQL Editor.
+   - For an existing database, review `supabase/04_hardening.sql` and apply it through the SQL Editor. Test it against a disposable/development Supabase project before applying it to production. It includes data backfill and constraint changes; do not assume it has been applied automatically.
 
-### 1. Clone & install
+   The SQL scripts are designed to be rerunnable. Do not use `prisma migrate` to manage this database.
 
-```powershell
-git clone https://github.com/your-org/skill-bridge-ai.git
-cd "skill-bridge-ai"
-npm install
-```
+4. Generate Prisma Client, then start the development server:
 
-### 2. Configure environment
+   ```bash
+   npx prisma generate
+   npm run dev
+   ```
 
-```powershell
-Copy-Item .env.example .env.local
-```
+5. Open [http://localhost:3000](http://localhost:3000). Sign up or sign in through Supabase Auth.
 
-Open `.env.local` and fill in:
+## Environment variables
 
-```env
-# Required: Google Gemini API key
-GEMINI_API_KEY=your_key_here
+See [.env.example](./.env.example) for the complete variable list and safe placeholders. The key variables are:
 
-# Optional: Override the default Gemini model
-# Defaults to gemini-2.0-flash-exp if not set
-GEMINI_MODEL=gemini-2.0-flash-exp
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Supabase pooled Postgres connection used by the app |
+| `DIRECT_URL` | Direct Postgres connection used by Prisma tooling |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase public/anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only key used for Auth Admin operations, including account deletion |
+| `GEMINI_API_KEY` | Optional Gemini API credential |
+| `GEMINI_MODEL` | Primary Gemini model ID |
+| `GEMINI_FALLBACK_MODELS` | Optional comma-separated backup model IDs |
+| `TEST_EMAIL_DOMAIN` | Exact email domain allowed by the cleanup script |
 
-# Required: Database connection string
-# For local SQLite development:
-DATABASE_URL="file:./dev.db"
-# For production Postgres (Neon / Supabase):
-# DATABASE_URL="postgresql://user:pass@host/db?sslmode=require"
-```
+Supabase configuration is required in production; the app does not silently substitute placeholder project credentials. Never commit real credentials.
 
-> **Note:** `.env.local` is gitignored and should never be committed.
+## Database and data handling
 
-### 3. Set up the database
+- `supabase/00_RUN_ALL.sql` is the ordered SQL entry point; individual schema, policy, seed, and hardening scripts live in `supabase/`.
+- `prisma/schema.prisma` must remain in sync with the SQL schema. Use `npx prisma validate` and `npx prisma generate` to check the Prisma representation.
+- Do not use Prisma migrations or `prisma db push` against Supabase; update the SQL source-of-truth scripts and the Prisma schema together.
+- `DELETE /api/my-data` removes the authenticated user's application data and Supabase Auth account. It requires the server-only service-role key and must not report success if either deletion step fails.
+- Resume review and interview records are associated with the authenticated profile. Do not log resume text, interview answers, or raw errors containing user data.
 
-```powershell
-npx prisma migrate dev --name init
-npm run seed
-```
+## Useful commands
 
-### 4. Run the development server
-
-```powershell
+```bash
 npm run dev
+npm run lint
+npx tsc --noEmit
+npx prisma validate
+npx prisma generate
+npx vitest run
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Remove test profiles only after configuring `TEST_EMAIL_DOMAIN` to an exact test-only domain:
 
----
-
-## 🧪 Verify the installation
-
-Follow these 5 quick scenarios (each under 60 seconds):
-
-1. **Skill Gap Detector** — Navigate to `/onboarding`, select "Junior Frontend Developer", enter `HTML, CSS, JavaScript, React`, click **Analyze**. Expect a 0–100 score gauge with High/Medium/Low missing skills.
-
-2. **Learning Plan** — From the gap report, click **Build my learning plan**. Expect a 4-week roadmap with task checkboxes. Tick a task and verify the progress bar updates.
-
-3. **Resume Checker** — Navigate to `/resume-checker`, paste any resume text, click **Evaluate Resume**. Expect an ATS score, keyword pills, and 5 bullet rewrites.
-
-4. **Mock Interview** — Navigate to `/interviews`, click **Start Interview**. Answer 5 questions. Expect per-question scores (1–10) and a final summary report.
-
-5. **Job Matches** — Navigate to `/job-matches`. Expect 40 jobs ranked by match %. Filter by location.
-
-### Fallback mode test
-
-Temporarily rename `.env.local` to `.env.local.bak` and restart `npm run dev`. All AI routes should return deterministic responses with `"source": "fallback"`.
-
----
-
-## 🌐 Deployment (Vercel)
-
-### One-time setup
-
-```powershell
-npm install -g vercel
-vercel login
+```bash
+npx tsx scripts/cleanup-test-sessions.ts
 ```
 
-### Database: Neon (Postgres — free tier)
+The cleanup script is destructive for matching accounts. Inspect the configured domain and target environment before running it.
 
-1. Create a project at [neon.tech](https://neon.tech).
-2. Copy the connection string.
-3. In your Vercel project, add environment variable `DATABASE_URL` with the Neon string.
-4. Change `prisma/schema.prisma` provider from `sqlite` to `postgresql`.
-5. Run `npx prisma migrate deploy` against the Neon DB before deploying.
+## Project layout
 
-### Deploy
-
-```powershell
-vercel --prod
+```text
+src/
+  app/                 App Router pages and API route handlers
+  components/          Shared UI and feature components
+  data/                Static role and skill data
+  lib/
+    ai/                Gemini integration, prompts, quotas, and fallbacks
+    scoring/           Shared readiness calculation and skill matching
+    supabase/          Supabase client configuration
+prisma/
+  schema.prisma        Prisma Client data model mirror
+scripts/               Database seed and test-account cleanup scripts
+specs/                 Feature specifications, contracts, and plans
+supabase/               SQL schema source of truth and setup scripts
 ```
 
-### Required environment variables (Vercel dashboard → Settings → Environment Variables)
+## Deployment
 
-| Variable | Required | Notes |
-|---|---|---|
-| `DATABASE_URL` | ✅ | Neon / Supabase Postgres connection string |
-| `GEMINI_API_KEY` | ✅ | Google AI Studio API key |
-| `GEMINI_MODEL` | Optional | Defaults to `gemini-2.0-flash-exp` |
+Configure the required environment variables in the deployment environment, including `DATABASE_URL`, `DIRECT_URL`, Supabase public configuration, and the server-only service-role key. Add Gemini configuration if Gemini responses are desired. Apply and verify the SQL scripts in a development Supabase project before deploying schema changes to production.
 
-### Before first production launch
-
-Run the cleanup script to remove any test sessions from the database:
-
-```powershell
-node scripts/cleanup-test-sessions.ts
-```
-
----
-
-## 📐 Database Schema
-
-Nine Prisma models:
-
-- **Session** — guest session (localStorage ID → DB)
-- **SkillGapReport** — keyed by `(sessionId, targetRole, skillsHash)` for role-switch isolation
-- **LearningPlan** + **PlanTask** — week-by-week curriculum with task completion
-- **ResumeReview** — ATS analysis result per session and role
-- **InterviewSession** + **InterviewAnswer** — mock interview state and scoring
-- **TargetRole** — seeded role metadata
-- **JobRole** — seeded job listings (40 curated Indian tech jobs)
-
----
-
-## 🤖 AI Integration
-
-All AI calls go through `src/lib/ai/gemini.ts`:
-
-- **Retry**: 3 attempts with exponential backoff (600 ms → 1 500 ms → 3 000 ms).
-- **Timeout**: 20-second hard cap per call; auto-falls back on timeout.
-- **Model cascade**: Primary model → secondary model → `gemini-3.5-flash-lite`.
-- **Fallback**: Every feature has a deterministic fallback in `src/lib/ai/fallbacks/`.
-- **No API key**: App runs fully in fallback mode.
-
-### Model configuration
-
-Set `GEMINI_MODEL` in `.env.local`. Available options:
-
-```
-gemini-2.0-flash-exp     (default, fast + capable)
-gemini-1.5-pro           (highest quality, slower)
-gemini-1.5-flash         (faster, good quality)
-```
-
----
-
-## 🔒 Security & Privacy
-
-- No user authentication — all sessions are guest sessions keyed by a UUID stored in `localStorage`.
-- **API key lives only in server code** — never exposed to the client.
-- **Answer and resume text are never logged** — only timing durations are written to console.
-- `GEMINI_API_KEY` is validated server-side; the app degrades gracefully without it.
-
----
-
-## 🧹 Development Scripts
-
-```powershell
-npm run dev          # Start development server
-npm run build        # Production build
-npm run lint         # ESLint
-npm run seed         # Seed the database with roles and jobs
-
-# Cleanup test sessions (run against production DB before launch)
-node scripts/cleanup-test-sessions.ts
-```
-
----
-
-## 📱 Responsive Design
-
-Tested at 375 px (mobile), 768 px (tablet), and 1280 px (desktop). All pages use responsive Tailwind utility classes (`sm:`, `md:`, `lg:` breakpoints).
-
----
-
-## 🪪 License
-
-MIT © 2026 CWW AI Project
+The AI request deadline is bounded to fit within the application's 30-second route limit. Per-user AI quota enforcement and interview-session limits use Postgres; the hardening SQL must be applied before those database-backed controls can operate.

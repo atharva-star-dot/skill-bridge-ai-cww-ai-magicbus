@@ -8,8 +8,13 @@ import {
   AnswerEvaluation,
   QuestionType,
 } from '@/lib/schemas/interview.schema';
-import { buildEvaluateAnswerPrompt } from '@/lib/ai/prompts/interview.prompt';
+import {
+  buildEvaluateAnswerPrompt,
+  INTERVIEW_EVALUATION_SYSTEM_INSTRUCTION,
+} from '@/lib/ai/prompts/interview.prompt';
 import { evaluateAnswerFallback } from '@/lib/ai/fallbacks/interview.fallback';
+import { hasFiveScoredAnswers } from '@/lib/interview/completion';
+import { enforceAiRateLimit } from '@/lib/ai/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -53,10 +58,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Interview session not found or invalid' }, { status: 404 });
     }
 
+    if (
+      session.status !== 'in_progress' ||
+      session.currentQuestionIndex !== questionIndex
+    ) {
+      return NextResponse.json({ error: 'Question is out of order or already answered' }, { status: 409 });
+    }
+
     const targetAnswer = session.answers.find((a) => a.questionIndex === questionIndex);
     if (!targetAnswer) {
       return NextResponse.json({ error: `Question index ${questionIndex} not found` }, { status: 404 });
     }
+    if (targetAnswer.userAnswer !== null || targetAnswer.score !== null) {
+      return NextResponse.json({ error: 'Question is out of order or already answered' }, { status: 409 });
+    }
+    const rateLimitResponse = await enforceAiRateLimit(userId);
+    if (rateLimitResponse) return rateLimitResponse;
 
     // 2. Evaluate answer (server-side Gemini or fallback). Do not log userAnswer raw text.
     let evaluation: AnswerEvaluation;
@@ -73,15 +90,19 @@ export async function POST(req: NextRequest) {
           targetAnswer.questionText,
           userAnswer
         );
-        const aiResult = await executeGeminiWithRetry(prompt, AnswerEvaluationSchema);
+        const aiResult = await executeGeminiWithRetry(
+          prompt,
+          AnswerEvaluationSchema,
+          INTERVIEW_EVALUATION_SYSTEM_INSTRUCTION
+        );
         const durationMs = Math.round(performance.now() - startTime);
         console.info(`[Interview:Answer] AI scoring completed in ${durationMs}ms`);
         evaluation = { ...aiResult, source: 'ai' };
       } catch (aiErr: any) {
         const durationMs = Math.round(performance.now() - startTime);
         console.warn(
-          `[Interview:Answer] Gemini scoring failed after ${durationMs}ms, using deterministic fallback:`,
-          aiErr?.message
+          `[Interview:Answer] Gemini scoring failed after ${durationMs}ms; using deterministic fallback.`,
+          aiErr instanceof Error ? aiErr.name : 'UnknownError'
         );
         evaluation = evaluateAnswerFallback(
           session.targetRole,
@@ -99,6 +120,10 @@ export async function POST(req: NextRequest) {
         userAnswer
       );
     }
+    evaluation = {
+      ...evaluation,
+      score: Math.max(1, Math.min(10, Math.round(evaluation.score))),
+    };
 
     // 3. Persist the answer and feedback (feedback is stored as JSON string containing strengths and improvements)
     const feedbackPayload = JSON.stringify({
@@ -106,27 +131,76 @@ export async function POST(req: NextRequest) {
       improvements: evaluation.improvements,
     });
 
-    await prisma.interviewAnswer.update({
-      where: { id: targetAnswer.id },
-      data: {
-        userAnswer,
-        score: evaluation.score,
-        feedback: feedbackPayload,
-        sampleAnswer: evaluation.improvedSampleAnswer,
-      },
+    const updateResult = await prisma.$transaction(async (transaction) => {
+      await transaction.$queryRaw`
+        SELECT id
+        FROM public.interview_sessions
+        WHERE id = ${interviewSessionId}::uuid
+        FOR UPDATE
+      `;
+
+      const currentSession = await transaction.interviewSession.findUnique({
+        where: { id: interviewSessionId },
+        include: {
+          answers: {
+            orderBy: { questionIndex: 'asc' },
+          },
+        },
+      });
+
+      if (!currentSession || currentSession.userId !== userId) {
+        return { status: 404 as const };
+      }
+
+      const answerToUpdate = currentSession.answers.find(
+        (answer) => answer.questionIndex === questionIndex
+      );
+      if (
+        currentSession.status !== 'in_progress' ||
+        currentSession.currentQuestionIndex !== questionIndex ||
+        !answerToUpdate ||
+        answerToUpdate.userAnswer !== null ||
+        answerToUpdate.score !== null
+      ) {
+        return { status: 409 as const };
+      }
+
+      await transaction.interviewAnswer.update({
+        where: { id: answerToUpdate.id },
+        data: {
+          userAnswer,
+          score: evaluation.score,
+          feedback: feedbackPayload,
+          sampleAnswer: evaluation.improvedSampleAnswer,
+        },
+      });
+
+      const nextQuestionIndex = Math.min(5, questionIndex + 1);
+      const answersAfterUpdate = currentSession.answers.map((answer) =>
+        answer.questionIndex === questionIndex
+          ? { ...answer, score: evaluation.score }
+          : answer
+      );
+      const isCompleted =
+        nextQuestionIndex === 5 && hasFiveScoredAnswers(answersAfterUpdate);
+
+      await transaction.interviewSession.update({
+        where: { id: interviewSessionId },
+        data: {
+          currentQuestionIndex: nextQuestionIndex,
+          ...(isCompleted ? { status: 'completed' } : {}),
+        },
+      });
+
+      return { status: 200 as const, nextQuestionIndex, isCompleted };
     });
 
-    // Update currentQuestionIndex in interviewSession
-    const nextQuestionIndex = Math.min(5, questionIndex + 1);
-    const isCompleted = nextQuestionIndex >= 5;
-
-    await prisma.interviewSession.update({
-      where: { id: interviewSessionId },
-      data: {
-        currentQuestionIndex: nextQuestionIndex,
-        ...(isCompleted ? { status: 'completed' } : {}),
-      },
-    });
+    if (updateResult.status === 404) {
+      return NextResponse.json({ error: 'Interview session not found or invalid' }, { status: 404 });
+    }
+    if (updateResult.status === 409) {
+      return NextResponse.json({ error: 'Question is out of order or already answered' }, { status: 409 });
+    }
 
     return NextResponse.json(
       {
@@ -138,15 +212,18 @@ export async function POST(req: NextRequest) {
           improvedSampleAnswer: evaluation.improvedSampleAnswer,
           source: evaluation.source,
         },
-        nextQuestionIndex,
-        isCompleted,
+        nextQuestionIndex: updateResult.nextQuestionIndex,
+        isCompleted: updateResult.isCompleted,
       },
       {
         headers: { 'Cache-Control': 'no-store' },
       }
     );
-  } catch (err: any) {
-    console.error('[Interview] Answer POST error:', err);
+  } catch (err: unknown) {
+    console.error(
+      '[Interview] Answer POST error:',
+      err instanceof Error ? err.name : 'UnknownError'
+    );
     return NextResponse.json({ error: 'Failed to evaluate answer' }, { status: 500 });
   }
 }

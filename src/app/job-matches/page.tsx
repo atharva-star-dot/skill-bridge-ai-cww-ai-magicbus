@@ -6,6 +6,7 @@ import { Briefcase, ArrowLeft } from 'lucide-react';
 import { JobMatchesView } from '@/components/features/JobMatchesView';
 import { Button } from '@/components/ui/button';
 import { SEED_JOBS } from '@/data/seed-jobs';
+import { skillsMatch } from '@/lib/scoring/skill-matching';
 
 export default function JobMatchesPage() {
   const [userSkills, setUserSkills] = useState<string[]>([]);
@@ -23,18 +24,13 @@ export default function JobMatchesPage() {
       .catch(() => {});
   }, []);
 
-  const normalizedUserSkills = userSkills.map((s) => s.toLowerCase().trim());
-
   // Rank jobs by match percentage against user's skills
   const rankedJobs = SEED_JOBS.map((job) => {
     const matched: string[] = [];
     const missing: string[] = [];
 
     for (const skill of job.skills) {
-      const lower = skill.toLowerCase();
-      const isMatched = normalizedUserSkills.some(
-        (uSkill) => lower.includes(uSkill) || uSkill.includes(lower)
-      );
+      const isMatched = userSkills.some((userSkill) => skillsMatch(userSkill, skill));
       if (isMatched) {
         matched.push(skill);
       } else {

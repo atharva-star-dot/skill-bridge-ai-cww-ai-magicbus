@@ -6,15 +6,12 @@ import { GapDetectorInputSchema, GapDetectorOutputSchema, GapDetectorOutput } fr
 import { buildSkillGapPrompt } from '@/lib/ai/prompts/gap-detector.prompt';
 import { SEED_ROLES } from '@/data/seed-roles';
 import { hashSkills } from '@/lib/utils/role-key';
+import { computeReadiness } from '@/lib/scoring/compute-readiness';
+import { skillsMatch } from '@/lib/scoring/skill-matching';
+import { enforceAiRateLimit } from '@/lib/ai/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
-
-// ─── Priority weights for readiness score ────────────────────────────────────
-// Formula: readinessScore = (Σ weight of matched skills) / (Σ weight of all required skills) × 100
-// Weights: High = 3, Medium = 2, Low = 1
-// High-priority skills count 3× as much because they are dealbreakers in fresher hiring.
-const PRIORITY_WEIGHT: Record<string, number> = { High: 3, Medium: 2, Low: 1 };
 
 const SKILL_REASON_LOOKUP: Record<string, string> = {
   // Frontend
@@ -77,8 +74,8 @@ const SKILL_REASON_LOOKUP: Record<string, string> = {
 
 function getSkillReason(skillName: string, isCore: boolean, targetRole: string): string {
   if (SKILL_REASON_LOOKUP[skillName]) return SKILL_REASON_LOOKUP[skillName];
-  const found = Object.keys(SKILL_REASON_LOOKUP).find((k) =>
-    skillName.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(skillName.toLowerCase())
+  const found = Object.keys(SKILL_REASON_LOOKUP).find((key) =>
+    skillsMatch(skillName, key)
   );
   if (found && SKILL_REASON_LOOKUP[found]) return SKILL_REASON_LOOKUP[found];
   if (isCore) return `${skillName} is a core requirement for entry-level ${targetRole} positions; recruiters screen for it in every round.`;
@@ -110,6 +107,8 @@ export async function POST(req: NextRequest) {
     }
 
     const { targetRole, currentSkills, resumeText } = validation.data;
+    const rateLimitResponse = await enforceAiRateLimit(userId);
+    if (rateLimitResponse) return rateLimitResponse;
 
     // Check if target role matches a seed role to grab benchmark skills
     const seedRole = SEED_ROLES.find(
@@ -129,20 +128,37 @@ export async function POST(req: NextRequest) {
         console.info(`[GapDetector] AI call completed in ${durationMs}ms`);
         output = {
           ...aiResult,
-          readinessScore: computeWeightedScore(aiResult.matchedSkills, aiResult.missingSkills, aiResult.requiredSkills),
+          readinessScore: computeReadiness({
+            benchmark: seedRole
+              ? {
+                  requiredSkills: seedRole.requiredSkills,
+                  goodToHaveSkills: seedRole.goodToHaveSkills,
+                }
+              : { requiredSkills: aiResult.requiredSkills, goodToHaveSkills: [] },
+            matchedSkills: aiResult.matchedSkills,
+            missingSkills: aiResult.missingSkills,
+          }),
           source: 'ai',
         };
       } catch (aiError: any) {
         const durationMs = Math.round(performance.now() - startTime);
-        console.warn(`[GapDetector] Gemini AI failed after ${durationMs}ms, using deterministic benchmark fallback:`, aiError?.message);
+        console.warn(
+          `[GapDetector] Gemini AI failed after ${durationMs}ms; using deterministic benchmark fallback.`,
+          aiError instanceof Error ? aiError.name : 'UnknownError'
+        );
         output = generateFallbackSkillGap(targetRole, currentSkills, seedRole);
       }
     } else {
       console.info('No GEMINI_API_KEY detected. Using deterministic benchmark generator.');
       output = generateFallbackSkillGap(targetRole, currentSkills, seedRole);
     }
+    output = {
+      ...output,
+      readinessScore: Math.max(0, Math.min(100, Math.round(output.readinessScore))),
+    };
 
     // ── Persist to Database ────────────────────────────────────────────────────
+    let persisted = true;
     try {
       // 1. Upsert Profile with the fresh, un-boosted readiness score for this role
       await prisma.profile.upsert({
@@ -175,48 +191,28 @@ export async function POST(req: NextRequest) {
           summary: output.summary,
         },
       });
-    } catch (dbError) {
-      console.warn('Database save warning (proceeding with response):', dbError);
+    } catch (dbError: unknown) {
+      persisted = false;
+      console.warn(
+        '[GapDetector] Report save failed; returning an unsaved report.',
+        dbError instanceof Error ? dbError.name : 'UnknownError'
+      );
     }
 
-    return NextResponse.json(output, {
+    return NextResponse.json({ ...output, persisted }, {
       status: 200,
       headers: { 'Cache-Control': 'no-store, max-age=0' },
     });
-  } catch (error: any) {
-    console.error('Skill Gap Detection Error:', error);
+  } catch (error: unknown) {
+    console.error(
+      'Skill Gap Detection Error:',
+      error instanceof Error ? error.name : 'UnknownError'
+    );
     return NextResponse.json(
-      { error: error?.message || 'An unexpected error occurred during skill gap analysis.' },
+      { error: 'An unexpected error occurred during skill gap analysis.' },
       { status: 500 }
     );
   }
-}
-
-// ─── Weighted readiness score ─────────────────────────────────────────────────
-function computeWeightedScore(
-  matchedSkills: string[],
-  missingSkills: GapDetectorOutput['missingSkills'],
-  requiredSkills: string[]
-): number {
-  const matchedSet = new Set(matchedSkills.map((s) => s.toLowerCase()));
-  const priorityMap = new Map<string, number>();
-  for (const ms of missingSkills) {
-    priorityMap.set(ms.name.toLowerCase(), PRIORITY_WEIGHT[ms.priority] ?? 2);
-  }
-
-  let totalWeight = 0;
-  let matchedWeight = 0;
-
-  for (const skill of requiredSkills) {
-    const lower = skill.toLowerCase();
-    const weight = priorityMap.get(lower) ?? PRIORITY_WEIGHT['High'];
-    totalWeight += weight;
-    if (matchedSet.has(lower)) matchedWeight += weight;
-  }
-
-  if (totalWeight === 0) return 50;
-  const raw = Math.round((matchedWeight / totalWeight) * 100);
-  return Math.max(10, Math.min(98, raw));
 }
 
 function buildSummary(
@@ -246,7 +242,6 @@ function generateFallbackSkillGap(
   userSkills: string[],
   seedRole?: (typeof SEED_ROLES)[0]
 ): GapDetectorOutput {
-  const normalizedUserSkills = userSkills.map((s) => s.toLowerCase().trim()).filter(Boolean);
   const benchmarkReq = seedRole
     ? seedRole.requiredSkills
     : ['Core Problem Solving', 'Git / GitHub', 'System Design Basics', 'Unit Testing', 'Communication Skills'];
@@ -259,10 +254,7 @@ function generateFallbackSkillGap(
   const missingSkills: GapDetectorOutput['missingSkills'] = [];
 
   for (const skill of allReq) {
-    const lower = skill.toLowerCase();
-    const isMatched = normalizedUserSkills.some(
-      (userSkill) => lower.includes(userSkill) || userSkill.includes(lower)
-    );
+    const isMatched = userSkills.some((userSkill) => skillsMatch(userSkill, skill));
 
     if (isMatched) {
       matchedSkills.push(skill);
@@ -279,8 +271,14 @@ function generateFallbackSkillGap(
 
   const highCount = missingSkills.filter((m) => m.priority === 'High').length;
   const medCount = missingSkills.filter((m) => m.priority === 'Medium').length;
-  const missingWithPriority = missingSkills.map((m) => ({ ...m }));
-  const readinessScore = computeWeightedScore(matchedSkills, missingWithPriority, allReq);
+  const readinessScore = computeReadiness({
+    benchmark: {
+      requiredSkills: benchmarkReq,
+      goodToHaveSkills: benchmarkGood,
+    },
+    matchedSkills,
+    missingSkills,
+  });
 
   return {
     targetRole,

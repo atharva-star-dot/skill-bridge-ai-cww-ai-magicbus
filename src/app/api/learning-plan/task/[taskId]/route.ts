@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
+import { SEED_ROLES } from '@/data/seed-roles';
+import { computeReadiness } from '@/lib/scoring/compute-readiness';
+import { textContainsSkill } from '@/lib/scoring/skill-matching';
+import { safeJsonParse } from '@/lib/utils/safe-json';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,110 +44,122 @@ export async function PATCH(
     const { isCompleted } = validation.data;
     const { taskId } = params;
 
-    // 1. Update task completion status
-    const task = await prisma.planTask.update({
-      where: { id: taskId },
-      data: { isCompleted },
+    const ownedTask = await prisma.planTask.findFirst({
+      where: { id: taskId, plan: { userId } },
       include: { plan: true },
     });
 
-    if (task.plan.userId !== userId) {
-      return NextResponse.json({ error: 'Task not found or unauthorized' }, { status: 403 });
+    if (!ownedTask) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
-    const planId = task.planId;
-    const targetRole = task.plan.targetRole;
+    const result = await prisma.$transaction(async (tx) => {
+      const task = await tx.planTask.findFirst({
+        where: { id: taskId, plan: { userId } },
+        include: { plan: true },
+      });
 
-    // 2. Fetch all tasks in this plan to calculate completion %
-    const allTasks = await prisma.planTask.findMany({ where: { planId } });
-    const completedTasks = allTasks.filter((t) => t.isCompleted);
-    const completionPercentage = Math.round((completedTasks.length / allTasks.length) * 100);
+      if (!task) return null;
 
-    await prisma.learningPlan.update({
-      where: { id: planId },
-      data: { completionPercentage },
-    });
+      await tx.planTask.update({
+        where: { id: taskId },
+        data: { isCompleted },
+      });
 
-    // 3. Deterministic readiness recalculation
-    let updatedReadiness: number | undefined;
+      const allTasks = await tx.planTask.findMany({ where: { planId: task.planId } });
+      const completedTasks = allTasks.filter((item) => item.isCompleted);
+      const completionPercentage = Math.round((completedTasks.length / allTasks.length) * 100);
 
-    try {
-      // Find latest base report for this role
-      const latestReport = await prisma.skillGapReport.findFirst({
-        where: { userId, targetRole },
+      await tx.learningPlan.update({
+        where: { id: task.planId },
+        data: { completionPercentage },
+      });
+
+      let updatedReadiness: number | undefined;
+      const latestReport = await tx.skillGapReport.findFirst({
+        where: { userId, targetRole: task.plan.targetRole },
         orderBy: { createdAt: 'desc' },
       });
 
       if (latestReport) {
-        const baseScore = latestReport.readinessScore;
-
-        // Parse missing skills to know priority of each skill
-        const missingPriorityMap = new Map<string, number>();
-        try {
-          const missingItems: Array<{ name: string; priority: string }> = JSON.parse(
-            latestReport.missingSkills || '[]'
-          );
-          for (const item of missingItems) {
-            const w = item.priority === 'High' ? 3 : item.priority === 'Medium' ? 2 : 1;
-            missingPriorityMap.set(item.name.toLowerCase(), w);
-          }
-        } catch {}
-
-        // Calculate weighted task completion
+        const matchedSkills = safeJsonParse<string[]>(latestReport.matchedSkills, []);
+        const missingSkills = safeJsonParse<
+          Array<{ name: string; priority: 'High' | 'Medium' | 'Low' }>
+        >(latestReport.missingSkills, []);
+        const seedRole = SEED_ROLES.find(
+          (role) =>
+            role.title.toLowerCase() === task.plan.targetRole.toLowerCase() ||
+            role.slug === task.plan.targetRole.toLowerCase()
+        );
+        const benchmark = seedRole
+          ? {
+              requiredSkills: seedRole.requiredSkills,
+              goodToHaveSkills: seedRole.goodToHaveSkills,
+            }
+          : {
+              requiredSkills: [...matchedSkills, ...missingSkills.map((skill) => skill.name)],
+              goodToHaveSkills: [],
+            };
+        const missingPriorityMap = new Map(
+          missingSkills.map((skill) => [
+            skill.name.toLowerCase(),
+            skill.priority === 'High' ? 3 : skill.priority === 'Medium' ? 2 : 1,
+          ])
+        );
         let totalTaskWeight = 0;
         let completedTaskWeight = 0;
-
-        for (const t of allTasks) {
-          let taskWeight = 2; // default Medium
-          Array.from(missingPriorityMap.entries()).forEach(([skillName, w]) => {
-            if (
-              t.title.toLowerCase().includes(skillName) ||
-              t.description.toLowerCase().includes(skillName)
-            ) {
-              taskWeight = Math.max(taskWeight, w);
+        for (const item of allTasks) {
+          let taskWeight = 2;
+          for (const [skillName, weight] of Array.from(missingPriorityMap.entries())) {
+            if (textContainsSkill(item.title, skillName) || textContainsSkill(item.description, skillName)) {
+              taskWeight = Math.max(taskWeight, weight);
             }
-          });
-          totalTaskWeight += taskWeight;
-          if (t.isCompleted) {
-            completedTaskWeight += taskWeight;
           }
+          totalTaskWeight += taskWeight;
+          if (item.isCompleted) completedTaskWeight += taskWeight;
         }
 
-        const weightedProgress =
-          totalTaskWeight > 0
-            ? completedTaskWeight / totalTaskWeight
-            : completedTasks.length / allTasks.length;
-
-        // Deterministic linear progression bounded between baseScore and 95
-        const potentialGain = 95 - baseScore;
-        const newScore = Math.min(95, Math.round(baseScore + potentialGain * weightedProgress));
-
-        await prisma.profile.update({
-          where: { id: userId },
-          data: { readinessScore: newScore },
+        updatedReadiness = computeReadiness({
+          benchmark,
+          matchedSkills,
+          missingSkills,
+          taskProgress: {
+            completedWeight: completedTaskWeight,
+            totalWeight: totalTaskWeight,
+          },
         });
 
-        updatedReadiness = newScore;
+        await tx.profile.update({
+          where: { id: userId },
+          data: { readinessScore: updatedReadiness },
+        });
       }
-    } catch (scoreErr) {
-      console.warn('[TaskToggle] Readiness recalculation warning:', scoreErr);
+
+      return { completionPercentage, updatedReadiness };
+    });
+
+    if (!result) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
     return NextResponse.json(
       {
         taskId,
         isCompleted,
-        completionPercentage,
-        newReadiness: updatedReadiness,
+        completionPercentage: result.completionPercentage,
+        newReadiness: result.updatedReadiness,
       },
       {
         headers: { 'Cache-Control': 'no-store' },
       }
     );
-  } catch (error: any) {
-    console.error('[TaskToggle] Error:', error);
+  } catch (error: unknown) {
+    console.error(
+      '[TaskToggle] Request failed:',
+      error instanceof Error ? error.name : 'UnknownError'
+    );
     return NextResponse.json(
-      { error: error?.message || 'Failed to update task' },
+      { error: 'Failed to update task' },
       { status: 500 }
     );
   }
