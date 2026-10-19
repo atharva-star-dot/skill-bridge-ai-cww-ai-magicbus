@@ -301,8 +301,8 @@ G1–G5 close the previously identified logging, RLS, integration-evidence, and 
 
 ### G3 — Real Postgres integration test scaffolding (SC-007, SC-012, SC-014)
 
-- [x] T081 Add `vitest.int.config.ts`, the `test:int` script in `package.json`, and `tests/integration/setup.ts` plus `tests/integration/stub-auth.ts` to apply `supabase/00_RUN_ALL.sql` only when `TEST_DATABASE_URL` is configured.
-- [x] T082 Add `.github/workflows/postgres-integration.yml` and `tests/integration/security-and-data-integrity.int.test.ts` for real-database concurrency, interview-answer race, session-cap, and Prisma schema-parity checks; verified by the successful CI run recorded in `research.md`.
+- [ ] T081 Add `vitest.int.config.ts`, the `test:int` script in `package.json`, and `tests/integration/setup.ts` plus `tests/integration/stub-auth.ts` to apply `supabase/00_RUN_ALL.sql` only when `TEST_DATABASE_URL` is configured; keep unchecked until the full integration job, including legacy upgrade tests, passes.
+- [ ] T082 Add `.github/workflows/postgres-integration.yml` and `tests/integration/security-and-data-integrity.int.test.ts` for real-database concurrency, interview-answer race, session-cap, and Prisma schema-parity checks; keep unchecked until the full integration job, including legacy upgrade tests, passes.
 
 ## Final analysis — CI run 39328544185
 

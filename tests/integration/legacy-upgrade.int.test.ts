@@ -140,7 +140,7 @@ async function createLegacyDatabase(): Promise<PrismaClient> {
 async function insertRepresentativeRows(prisma: PrismaClient): Promise<void> {
   await prisma.$executeRaw`
     INSERT INTO auth.users (id, email, raw_user_meta_data)
-    VALUES (${ids.user}, 'legacy@example.test', '{}'::jsonb)
+    VALUES (${ids.user}::uuid, 'legacy@example.test', '{}'::jsonb)
   `;
   await prisma.$executeRaw`
     INSERT INTO public.profiles (id, email, full_name, target_role, current_skills, readiness_score, created_at)

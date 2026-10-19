@@ -1,3 +1,4 @@
+-- ONLY for upgrading a legacy text-typed database. Never run on a fresh project.
 BEGIN;
 
 DO $preflight$

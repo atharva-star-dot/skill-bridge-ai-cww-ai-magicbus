@@ -9,7 +9,9 @@ const migration = readFileSync(
 
 describe('legacy text-schema upgrade migration', () => {
   it('is one explicit transaction and does not suppress SQL failures', () => {
-    expect(migration.trimStart()).toMatch(/^BEGIN;/i);
+    expect(migration).toMatch(
+      /^-- ONLY for upgrading a legacy text-typed database\. Never run on a fresh project\.\r?\nBEGIN;/i
+    );
     expect(migration.trimEnd()).toMatch(/COMMIT;$/i);
     expect(migration).not.toMatch(/EXCEPTION\s+WHEN\s+OTHERS/i);
   });
