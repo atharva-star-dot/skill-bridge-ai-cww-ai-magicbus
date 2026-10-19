@@ -153,6 +153,34 @@ describe.skipIf(!databaseUrl)('PostgreSQL security and integrity integration', (
     const testDatabaseUrl = getTestDatabaseUrl();
     assertDisposableTestDatabaseUrl(testDatabaseUrl);
 
+    const foreignKeyDefinitions = await prisma.$queryRaw<
+      Array<{ table_name: string; constraint_name: string; definition: string }>
+    >`
+      SELECT table_row.relname AS table_name,
+             fk.conname AS constraint_name,
+             pg_get_constraintdef(fk.oid) AS definition
+      FROM pg_constraint AS fk
+      JOIN pg_class AS table_row ON table_row.oid = fk.conrelid
+      JOIN pg_namespace AS table_schema ON table_schema.oid = table_row.relnamespace
+      WHERE fk.contype = 'f'
+        AND table_schema.nspname = 'public'
+        AND table_row.relname IN (
+          'profiles',
+          'skill_gap_reports',
+          'learning_plans',
+          'plan_tasks',
+          'resume_reviews',
+          'interview_sessions',
+          'interview_answers',
+          'ai_usage'
+        )
+      ORDER BY table_row.relname, fk.conname
+    `;
+    console.info(
+      '[schema-drift] Applied SQL foreign keys (Prisma relations expect onDelete: Cascade, onUpdate: NoAction):',
+      JSON.stringify(foreignKeyDefinitions)
+    );
+
     const foreignKeyRows = await prisma.$queryRaw<Array<{ passed: boolean }>>`
       SELECT EXISTS (
         SELECT 1

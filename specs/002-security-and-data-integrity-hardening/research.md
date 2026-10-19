@@ -69,3 +69,16 @@ The Prisma documentation currently redirects to the latest version; project-spec
 The SQL schema intentionally keeps `public.profiles.id` linked to `auth.users(id)` with `ON DELETE CASCADE`. Prisma's `migrate diff --from-url` introspection fails with P4002 on this cross-schema foreign key because the Prisma schema does not enable `multiSchema` or model the Supabase `auth` schema. The CI-only drift test first asserts through `pg_constraint` that `profiles_id_fkey` points from `public.profiles(id)` to `auth.users(id)` with cascade deletion, then drops only that constraint from its disposable local test database before running the Prisma diff. The test refuses to perform that change unless `TEST_DATABASE_URL` uses `localhost` or `127.0.0.1` and its database name contains `test`.
 
 This excluded constraint is still checked by the drift test's precondition and by the read-only `SC-003` check in `scripts/verify-supabase.ts`; it is not removed from production SQL. The verifier checks the referenced schemas, tables and columns, constraint name, and `ON DELETE CASCADE` action.
+
+### Prisma schema drift findings and alignment
+
+The CI drift report showed differences between the applied SQL schema and Prisma. SQL inspection confirms that primary-key UUID defaults use `gen_random_uuid()`, timestamp columns use `TIMESTAMPTZ` (PostgreSQL's default precision is 6), and foreign keys specify `ON DELETE CASCADE` while leaving `ON UPDATE` unspecified (PostgreSQL therefore uses `NO ACTION`). The integration drift check now prints `pg_get_constraintdef(oid)` for each relevant public foreign key before excluding the cross-schema profile constraint, so CI output also records the actual applied constraint names and actions.
+
+| Difference | SQL source-of-truth definition | Prisma alignment |
+|---|---|---|
+| UUID primary-key defaults | `gen_random_uuid()` on generated-ID tables; `profiles.id` is supplied by Supabase Auth and has no default | Use `@default(dbgenerated("gen_random_uuid()"))` on generated IDs; keep `Profile.id` without a default |
+| Timestamp column precision | `TIMESTAMPTZ`, equivalent to `TIMESTAMPTZ(6)` | Add `@db.Timestamptz(6)` while preserving `@default(now())` and `@updatedAt` |
+| Foreign-key update action | `NO ACTION` by PostgreSQL default; SQL explicitly specifies `ON DELETE CASCADE` | Set `onDelete: Cascade, onUpdate: NoAction` on every Prisma relation |
+| `profiles_id_fkey` cross-schema relation | `public.profiles(id)` references `auth.users(id)` with `ON DELETE CASCADE` | Keep `auth` out of `schema.prisma`; verify the constraint before dropping it only from the guarded disposable CI database for Prisma introspection, and check it read-only in `scripts/verify-supabase.ts` |
+
+The foreign-key diagnostic's `pg_get_constraintdef` output is the evidence for the actual CI database constraint definitions; the current SQL source predicts that the delete action is `CASCADE` and the update action is `NO ACTION`. Constraint names are not remapped in Prisma because the SQL-generated names follow Prisma's default `<table>_<column>_fkey` names; the diagnostic will expose any contrary name in CI.

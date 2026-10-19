@@ -15,8 +15,8 @@ model Profile {
   targetRole     String?   @map("target_role")
   currentSkills  String    @default("[]") @map("current_skills")
   readinessScore Int?      @map("readiness_score")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   gapReports        SkillGapReport[]
   learningPlans     LearningPlan[]
@@ -28,20 +28,20 @@ model Profile {
 }
 
 model TargetRole {
-  id               String   @id @default(uuid()) @db.Uuid
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   slug             String   @unique
   title            String
   category         String   // "Engineering", "Data & AI", "Design", "Product & QA"
   description      String
   requiredSkills   String   @map("required_skills")   // JSON string of string[]
   goodToHaveSkills String   @map("good_to_have_skills") // JSON string of string[]
-  createdAt        DateTime @default(now()) @map("created_at")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("target_roles")
 }
 
 model SkillGapReport {
-  id             String   @id @default(uuid()) @db.Uuid
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId         String   @map("user_id") @db.Uuid
   targetRole     String   @map("target_role")
   skillsHash     String?  @map("skills_hash")
@@ -49,9 +49,9 @@ model SkillGapReport {
   matchedSkills  String   @map("matched_skills") // JSON string of string[]
   missingSkills  String   @map("missing_skills") // JSON string of MissingSkillItem[]
   summary        String
-  createdAt      DateTime @default(now()) @map("created_at")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  profile        Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile        Profile  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([userId])
   @@index([userId, targetRole])
@@ -59,14 +59,14 @@ model SkillGapReport {
 }
 
 model LearningPlan {
-  id                   String     @id @default(uuid()) @db.Uuid
+  id                   String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId               String     @map("user_id") @db.Uuid
   targetRole           String     @map("target_role")
   durationWeeks        Int        @default(4) @map("duration_weeks")
   completionPercentage Int        @default(0) @map("completion_percentage")
-  createdAt            DateTime   @default(now()) @map("created_at")
+  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  profile              Profile    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile              Profile    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   tasks                PlanTask[]
 
   @@index([userId])
@@ -75,7 +75,7 @@ model LearningPlan {
 }
 
 model PlanTask {
-  id             String       @id @default(uuid()) @db.Uuid
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   planId         String       @map("plan_id") @db.Uuid
   weekNumber     Int          @map("week_number")
   title          String
@@ -84,14 +84,14 @@ model PlanTask {
   isCompleted    Boolean      @default(false) @map("is_completed")
   resources      String       @default("[]") // JSON string of LearningResource[]
 
-  plan           LearningPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  plan           LearningPlan @relation(fields: [planId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([planId, weekNumber])
   @@map("plan_tasks")
 }
 
 model ResumeReview {
-  id              String   @id @default(uuid()) @db.Uuid
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId          String   @map("user_id") @db.Uuid
   targetRole      String   @map("target_role")
   resumeText      String?  @map("resume_text")
@@ -100,9 +100,9 @@ model ResumeReview {
   weaknesses      String   // JSON string of string[]
   missingKeywords String   @map("missing_keywords") // JSON string of string[]
   bulletRewrites  String   @map("bullet_rewrites") // JSON string of BulletRewriteItem[]
-  createdAt       DateTime @default(now()) @map("created_at")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  profile         Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile         Profile  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([userId])
   @@index([userId, targetRole])
@@ -110,15 +110,15 @@ model ResumeReview {
 }
 
 model InterviewSession {
-  id                   String            @id @default(uuid()) @db.Uuid
+  id                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId               String            @map("user_id") @db.Uuid
   targetRole           String            @map("target_role")
   status               String            @default("in_progress") // "in_progress", "completed"
   currentQuestionIndex Int               @default(0) @map("current_question_index")
   summary              String?           // JSON string of InterviewSummary
-  createdAt            DateTime          @default(now()) @map("created_at")
+  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  profile              Profile           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile              Profile           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   answers              InterviewAnswer[]
 
   @@index([userId])
@@ -127,7 +127,7 @@ model InterviewSession {
 }
 
 model InterviewAnswer {
-  id                 String           @id @default(uuid()) @db.Uuid
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   interviewSessionId String           @map("interview_session_id") @db.Uuid
   questionIndex      Int              @map("question_index")
   questionType       String           @map("question_type") // "technical", "behavioral", "scenario"
@@ -136,27 +136,27 @@ model InterviewAnswer {
   score              Int?             // 1 to 10
   feedback           String?
   sampleAnswer       String?          @map("sample_answer")
-  createdAt          DateTime         @default(now()) @map("created_at")
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  interviewSession   InterviewSession @relation(fields: [interviewSessionId], references: [id], onDelete: Cascade)
+  interviewSession   InterviewSession @relation(fields: [interviewSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([interviewSessionId, questionIndex], map: "interview_answers_session_question_key")
   @@map("interview_answers")
 }
 
 model AiUsage {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId    String   @map("user_id") @db.Uuid
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  profile   Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile   Profile  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([userId, createdAt], map: "ai_usage_user_id_created_at_idx")
   @@map("ai_usage")
 }
 
 model JobRole {
-  id              String   @id @default(uuid()) @db.Uuid
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   title           String
   company         String
   location        String
@@ -164,7 +164,7 @@ model JobRole {
   salaryRange     String   @map("salary_range")     // e.g. "₹4.5 - ₹6 LPA"
   skills          String   // JSON string of string[]
   applyUrl        String   @map("apply_url")
-  createdAt       DateTime @default(now()) @map("created_at")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("job_roles")
 }
