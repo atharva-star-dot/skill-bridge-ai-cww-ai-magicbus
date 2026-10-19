@@ -6,7 +6,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { POST as startInterview } from '@/app/api/interview/start/route';
 import { POST as answerInterview } from '@/app/api/interview/answer/route';
 import { prisma } from '@/lib/db';
+import { reserveAiUsage } from '@/lib/ai/rate-limit';
 import { deleteAuthUser, seedAuthUser } from './stub-auth';
+import { formatPrismaDiffFailure } from './prisma-diff';
 
 const authState = vi.hoisted(() => ({ userId: '' }));
 
@@ -66,14 +68,9 @@ describe.skipIf(!databaseUrl)('PostgreSQL security and integrity integration', (
   it('admits exactly five of twenty concurrent quota reservations at a limit of five', async () => {
     const userId = await createUser();
     const reservations = await Promise.all(
-      Array.from({ length: 20 }, () =>
-        prisma.$queryRaw<Array<{ allowed: boolean }>>`
-          SELECT allowed
-          FROM public.reserve_ai_usage(${userId}::uuid, 5)
-        `
-      )
+      Array.from({ length: 20 }, () => reserveAiUsage(userId, 5))
     );
-    const allowed = reservations.filter((rows) => rows[0]?.allowed).length;
+    const allowed = reservations.filter((reservation) => reservation.allowed).length;
 
     expect(allowed).toBe(5);
     expect(reservations.length - allowed).toBe(15);
@@ -168,15 +165,22 @@ describe.skipIf(!databaseUrl)('PostgreSQL security and integrity integration', (
         cwd: process.cwd(),
         env: {
           ...process.env,
-          DATABASE_URL: databaseUrl,
-          DIRECT_URL: databaseUrl,
+          DATABASE_URL: getTestDatabaseUrl(),
+          DIRECT_URL: getTestDatabaseUrl(),
         },
         encoding: 'utf8',
         stdio: 'pipe',
       }
     );
 
-    expect(result.error, 'Prisma schema-diff command must execute').toBeUndefined();
-    expect(result.status, 'Applied SQL and Prisma schema must have no drift').toBe(0);
+    expect(
+      result.error,
+      `Prisma schema-diff command could not execute (${result.error?.name ?? 'UnknownError'}).\n` +
+        formatPrismaDiffFailure(result.status, result.stdout, result.stderr)
+    ).toBeUndefined();
+    expect(
+      result.status,
+      formatPrismaDiffFailure(result.status, result.stdout, result.stderr)
+    ).toBe(0);
   });
 });

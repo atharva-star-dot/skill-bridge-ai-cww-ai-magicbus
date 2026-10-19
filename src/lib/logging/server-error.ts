@@ -46,8 +46,14 @@ function getErrorDetails(error: unknown): Record<string, string> {
     const meta = asRecord(record?.meta);
     const modelName = meta?.modelName;
     const target = meta?.target;
+    const databaseCode = meta?.code;
     return {
       code,
+      ...(code === 'P2010' &&
+      typeof databaseCode === 'string' &&
+      /^[A-Z0-9]{5}$/.test(databaseCode)
+        ? { sqlState: databaseCode }
+        : {}),
       ...(typeof modelName === 'string' ? { model: shortString(modelName) } : {}),
       ...(typeof target === 'string'
         ? { target: shortString(target) }

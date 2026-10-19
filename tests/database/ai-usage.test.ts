@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { enforceAiRateLimit } from "@/lib/ai/rate-limit";
 
@@ -13,6 +14,14 @@ const migrationPath = fileURLToPath(
   new URL("../../supabase/04_hardening.sql", import.meta.url)
 );
 const migration = readFileSync(migrationPath, "utf8");
+
+function findTypeScriptFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return findTypeScriptFiles(path);
+    return /\.(?:ts|tsx)$/.test(entry.name) ? [path] : [];
+  });
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -45,6 +54,26 @@ describe("Postgres-backed AI usage quota", () => {
     expect(migration).toMatch(/clock_timestamp\(\) - INTERVAL '60 minutes'/i);
     expect(migration).toMatch(/created_at < window_start/i);
     expect(migration).toMatch(/oldest_usage \+ INTERVAL '60 minutes' - clock_timestamp\(\)/i);
+  });
+
+  it("routes every quota function call through the shared helper with explicit argument casts", () => {
+    const sourceFiles = ["../../src", "../../tests", "../../scripts"].flatMap((directory) =>
+      findTypeScriptFiles(fileURLToPath(new URL(directory, import.meta.url)))
+    );
+    const callSites: Array<{ path: string; call: string }> = [];
+
+    for (const path of sourceFiles) {
+      const source = readFileSync(path, "utf8");
+      const callPattern = /public\.reserve_ai_usage\s*\([\s\S]*?\)/g;
+      for (const match of Array.from(source.matchAll(callPattern))) {
+        callSites.push({ path, call: match[0] });
+      }
+    }
+
+    expect(callSites).toHaveLength(1);
+    expect(callSites[0].call).toMatch(
+      /public\.reserve_ai_usage\(\s*\$\{userId\}::uuid\s*,\s*\$\{limit\}::integer\s*\)/i
+    );
   });
 
   it("serializes concurrent reservations through the atomic database function", async () => {

@@ -28,6 +28,28 @@ describe('logServerError', () => {
     expect(line).not.toContain('CANARY');
   });
 
+  it('logs a safe Postgres SQLSTATE for Prisma P2010 without including meta messages', () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    logServerError(
+      'ai.quota',
+      Object.assign(new Error('Database query failed'), {
+        code: 'P2010',
+        meta: {
+          code: '42883',
+          message: 'CANARY sensitive database error',
+          query: 'CANARY SELECT with private values',
+        },
+      }),
+      { route: '/api/interview/start' }
+    );
+
+    const line = String(log.mock.calls[0][0]);
+    expect(line).toContain('"scope":"ai.quota"');
+    expect(line).toContain('"code":"P2010"');
+    expect(line).toContain('"sqlState":"42883"');
+    expect(line).not.toContain('CANARY');
+  });
+
   it('logs Zod issue codes and paths without validation messages', () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const error = new ZodError([
