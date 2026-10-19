@@ -324,3 +324,11 @@ The PostgreSQL integration job completed successfully. SC-003 and SC-010 remain 
 | SC-012 | Covered by real test | CI `integration` job, task T082: `tests/integration/security-and-data-integrity.int.test.ts` — `has no Prisma schema drift from the applied SQL schema` |
 | SC-013 | Covered by mock or static check | `tests/database/rls-policies.test.ts` checks the idempotent SQL policy definitions; runtime Supabase verification is included in T076 |
 | SC-014 | Covered by mock or static check | `tests/database/ai-usage.test.ts` checks the default 20-call boundary, `Retry-After`, database-clock window, and expiry expression; CI also proves real concurrent serialization at limit five. G4's deadline test is SC-006 evidence, not quota evidence; exact oldest-expiry `Retry-After` remains unverified against real Postgres. |
+
+## Legacy text-schema upgrade
+
+All tasks in this phase remain unchecked until the new isolated PostgreSQL CI integration run passes. The migration must not be applied to a Supabase database until its SQL has been reviewed and approved.
+
+- [ ] T083 Add the ordered read-only preflight, operational/rollback plan, and transactional in-place conversion in `specs/002-security-and-data-integrity-hardening/legacy-upgrade-plan.md`, `supabase/06_upgrade_legacy_text_schema.sql`, and `supabase/README.md`.
+- [ ] T084 Add a legacy schema fixture and isolated PostgreSQL integration tests for preservation, type conversion, migration reruns, bad-data guards, cascading deletes, schema drift, and post-upgrade quota/session concurrency in `tests/integration/fixtures/legacy-text-schema.sql` and `tests/integration/legacy-upgrade.int.test.ts`.
+- [ ] T085 Extend read-only schema verification for UUID, timestamp, task boolean, and estimated-hours column types in `scripts/verify-supabase.ts`; add migration structure checks in `tests/database/legacy-upgrade.test.ts`.

@@ -88,6 +88,49 @@ async function verifySupabase(): Promise<void> {
         `;
         return rows.length === 7 && rows.every((row) => row.passed);
       }),
+      await runCheck(prisma, 'SC-012', 'legacy-upgrade column types match the Prisma/SQL schema', async () => {
+        const rows = await prisma.$queryRaw<Array<{ passed: boolean }>>`
+          WITH expected(table_name, column_name, expected_type) AS (
+            VALUES
+              ('profiles', 'id', 'uuid'),
+              ('target_roles', 'id', 'uuid'),
+              ('skill_gap_reports', 'id', 'uuid'),
+              ('skill_gap_reports', 'user_id', 'uuid'),
+              ('learning_plans', 'id', 'uuid'),
+              ('learning_plans', 'user_id', 'uuid'),
+              ('plan_tasks', 'id', 'uuid'),
+              ('plan_tasks', 'plan_id', 'uuid'),
+              ('resume_reviews', 'id', 'uuid'),
+              ('resume_reviews', 'user_id', 'uuid'),
+              ('interview_sessions', 'id', 'uuid'),
+              ('interview_sessions', 'user_id', 'uuid'),
+              ('interview_answers', 'id', 'uuid'),
+              ('interview_answers', 'interview_session_id', 'uuid'),
+              ('job_roles', 'id', 'uuid'),
+              ('profiles', 'created_at', 'timestamp with time zone'),
+              ('profiles', 'updated_at', 'timestamp with time zone'),
+              ('target_roles', 'created_at', 'timestamp with time zone'),
+              ('skill_gap_reports', 'created_at', 'timestamp with time zone'),
+              ('learning_plans', 'created_at', 'timestamp with time zone'),
+              ('resume_reviews', 'created_at', 'timestamp with time zone'),
+              ('interview_sessions', 'created_at', 'timestamp with time zone'),
+              ('interview_answers', 'created_at', 'timestamp with time zone'),
+              ('job_roles', 'created_at', 'timestamp with time zone'),
+              ('plan_tasks', 'is_completed', 'boolean'),
+              ('plan_tasks', 'estimated_hours', 'double precision'),
+              ('ai_usage', 'id', 'uuid'),
+              ('ai_usage', 'user_id', 'uuid'),
+              ('ai_usage', 'created_at', 'timestamp with time zone')
+          )
+          SELECT columns.data_type = expected.expected_type AS passed
+          FROM expected
+          LEFT JOIN information_schema.columns AS columns
+            ON columns.table_schema = 'public'
+           AND columns.table_name = expected.table_name
+           AND columns.column_name = expected.column_name
+        `;
+        return rows.length === 29 && rows.every((row) => row.passed);
+      }),
       await runCheck(prisma, 'SC-013', 'all required SELECT and DELETE owner policies exist', async () => {
         const rows = await prisma.$queryRaw<Array<{ passed: boolean }>>`
           WITH expected(table_name, policy_name, command) AS (

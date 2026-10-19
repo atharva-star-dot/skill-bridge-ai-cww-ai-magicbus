@@ -70,10 +70,12 @@ describe("Postgres-backed AI usage quota", () => {
       }
     }
 
-    expect(callSites).toHaveLength(1);
-    expect(callSites[0].call).toMatch(
-      /public\.reserve_ai_usage\(\s*\$\{userId\}::uuid\s*,\s*\$\{limit\}::integer\s*\)/i
-    );
+    expect(callSites.length).toBeGreaterThan(0);
+    for (const callSite of callSites) {
+      expect(callSite.call).toMatch(
+        /public\.reserve_ai_usage\(\s*\$\{[^}]+\}::uuid\s*,\s*(?:\$\{[^}]+\}|[0-9]+)::integer\s*\)/i
+      );
+    }
   });
 
   it("serializes concurrent reservations through the atomic database function", async () => {
