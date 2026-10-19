@@ -281,7 +281,7 @@
 
 ## Gap Closure (from `/speckit.analyze`)
 
-G1–G5 close the previously identified logging, RLS, integration-evidence, and manual-verification gaps. G3 database integration tests are intentionally prepared but remain unchecked and unrun until `TEST_DATABASE_URL` is available.
+G1–G5 close the previously identified logging, RLS, integration-evidence, and manual-verification gaps. G3 database integration tests were run successfully in the PostgreSQL 16 GitHub Actions job recorded in `research.md`.
 
 ### G1 — Actionable server diagnostics (SC-008)
 
@@ -301,5 +301,26 @@ G1–G5 close the previously identified logging, RLS, integration-evidence, and 
 
 ### G3 — Real Postgres integration test scaffolding (SC-007, SC-012, SC-014)
 
-- [ ] T081 Add `vitest.int.config.ts`, the `test:int` script in `package.json`, and `tests/integration/setup.ts` plus `tests/integration/stub-auth.ts` to apply `supabase/00_RUN_ALL.sql` only when `TEST_DATABASE_URL` is configured.
-- [ ] T082 Add `.github/workflows/postgres-integration.yml` and `tests/integration/security-and-data-integrity.int.test.ts` for real-database concurrency, interview-answer race, session-cap, and Prisma schema-parity checks. Do not execute these tasks without `TEST_DATABASE_URL`.
+- [x] T081 Add `vitest.int.config.ts`, the `test:int` script in `package.json`, and `tests/integration/setup.ts` plus `tests/integration/stub-auth.ts` to apply `supabase/00_RUN_ALL.sql` only when `TEST_DATABASE_URL` is configured.
+- [x] T082 Add `.github/workflows/postgres-integration.yml` and `tests/integration/security-and-data-integrity.int.test.ts` for real-database concurrency, interview-answer race, session-cap, and Prisma schema-parity checks; verified by the successful CI run recorded in `research.md`.
+
+## Final analysis — CI run 39328544185
+
+The PostgreSQL integration job completed successfully. SC-003 and SC-010 remain pending the disposable-Supabase account-deletion checklist; T076 remains unchecked until that manual verification is supplied.
+
+| SC | Status | Proof (file / task / test name) |
+|---|---|---|
+| SC-001 | Covered by mock or static check | `src/app/api/learning-plan/task/[taskId].test.ts` ownership and no-write tests |
+| SC-002 | Covered by mock or static check | `src/lib/utils/redirect.test.ts`, `src/app/auth/callback/route.test.ts`, and `src/app/login/page.test.tsx` |
+| SC-003 | Manual pending | T076; `specs/002-security-and-data-integrity-hardening/manual-verification.md` |
+| SC-004 | Covered by mock or static check | `src/app/api/interview/answer/route.test.ts` rejects out-of-order answers |
+| SC-005 | Covered by real test | `src/lib/scoring/compute-readiness.test.ts` |
+| SC-006 | Covered by real test | `tests/ai/route-deadline.test.ts` — `returns fallback from every real AI route within 25 seconds and releases timers and sockets`; included in normal `npx vitest run` (not the integration-only CI workflow) |
+| SC-007 | Covered by real test | CI `integration` job, task T082: `tests/integration/security-and-data-integrity.int.test.ts` — `creates only three in-progress sessions from six concurrent starts` and `admits exactly five of twenty concurrent quota reservations at a limit of five`; `tests/api/ai-rate-limit.test.ts` covers route 429/Retry-After response handling |
+| SC-008 | Covered by mock or static check | `src/lib/logging/server-error.test.ts` verifies actionable codes and canary redaction; protected route tests verify generic errors |
+| SC-009 | Covered by real test | `src/lib/schemas/session.schema.test.ts`, `src/lib/schemas/gap-detector.schema.test.ts`, and `src/app/api/session/route.test.ts` |
+| SC-010 | Manual pending | T076; `specs/002-security-and-data-integrity-hardening/manual-verification.md` |
+| SC-011 | Covered by real test | `npx tsc --noEmit` and `npm run lint` completed successfully |
+| SC-012 | Covered by real test | CI `integration` job, task T082: `tests/integration/security-and-data-integrity.int.test.ts` — `has no Prisma schema drift from the applied SQL schema` |
+| SC-013 | Covered by mock or static check | `tests/database/rls-policies.test.ts` checks the idempotent SQL policy definitions; runtime Supabase verification is included in T076 |
+| SC-014 | Covered by mock or static check | `tests/database/ai-usage.test.ts` checks the default 20-call boundary, `Retry-After`, database-clock window, and expiry expression; CI also proves real concurrent serialization at limit five. G4's deadline test is SC-006 evidence, not quota evidence; exact oldest-expiry `Retry-After` remains unverified against real Postgres. |

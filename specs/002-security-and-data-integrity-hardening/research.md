@@ -82,3 +82,17 @@ The CI drift report showed differences between the applied SQL schema and Prisma
 | `profiles_id_fkey` cross-schema relation | `public.profiles(id)` references `auth.users(id)` with `ON DELETE CASCADE` | Keep `auth` out of `schema.prisma`; verify the constraint before dropping it only from the guarded disposable CI database for Prisma introspection, and check it read-only in `scripts/verify-supabase.ts` |
 
 The foreign-key diagnostic's `pg_get_constraintdef` output is the evidence for the actual CI database constraint definitions; the current SQL source predicts that the delete action is `CASCADE` and the update action is `NO ACTION`. Constraint names are not remapped in Prisma because the SQL-generated names follow Prisma's default `<table>_<column>_fkey` names; the diagnostic will expose any contrary name in CI.
+
+### PostgreSQL integration CI verification
+
+**Run:** [PostgreSQL integration tests, run 39328544185](https://github.com/atharva-star-dot/skill-bridge-ai-cww-ai-magicbus/actions/runs/39328544185)
+
+**Job:** `integration` (job 118320543494), PostgreSQL 16 service, `ubuntu-24.04`
+
+**Result:** success; `npm run test:int` completed successfully.
+
+**Run date:** 2026-10-19 UTC (completed 2026-10-20 local time, Asia/Kolkata).
+
+The real-Postgres integration test cases include `admits exactly five of twenty concurrent quota reservations at a limit of five`, `allows only one of two concurrent answers for the same question index`, `creates only three in-progress sessions from six concurrent starts`, and `has no Prisma schema drift from the applied SQL schema`. These provide real-database evidence for concurrency and schema parity (SC-007 and SC-012).
+
+The separate G4 test, `tests/ai/route-deadline.test.ts` — `returns fallback from every real AI route within 25 seconds and releases timers and sockets` — is included by the normal Vitest configuration and was covered by the successful local `npx vitest run`; the reported Actions workflow runs only `npm run test:int`, so that particular route-deadline test did not run in this CI job. It proves SC-006, not SC-014. SC-014's 20-call boundary and retry calculations have unit/mock and SQL-expression evidence; exact `Retry-After` matching the oldest expiring invocation has not yet been exercised against real Postgres. T076, SC-003, and SC-010 remain pending the manual disposable-Supabase verification.
