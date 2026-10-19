@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createClient } from '@/lib/supabase/server';
 import { hasFiveScoredAnswers } from '@/lib/interview/completion';
+import { logServerError } from '@/lib/logging/server-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -120,10 +121,9 @@ export async function GET(req: NextRequest) {
       }
     );
   } catch (err: unknown) {
-    console.error(
-      '[Interview] Active GET error:',
-      err instanceof Error ? err.name : 'UnknownError'
-    );
+    logServerError('interview_active.get', err, {
+      route: '/api/interview/active',
+    });
     return NextResponse.json({ error: 'Failed to fetch interview session' }, { status: 500 });
   }
 }

@@ -10,6 +10,7 @@ import {
 import { buildGenerateQuestionsPrompt } from '@/lib/ai/prompts/interview.prompt';
 import { getFallbackQuestions } from '@/lib/ai/fallbacks/interview.fallback';
 import { enforceAiRateLimit } from '@/lib/ai/rate-limit';
+import { logServerError } from '@/lib/logging/server-error';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -96,10 +97,12 @@ export async function POST(req: NextRequest) {
         questionsResult = { ...aiResult, source: 'ai' };
       } catch (aiErr: any) {
         const durationMs = Math.round(performance.now() - startTime);
-        console.warn(
-          `[Interview:Start] Gemini failed after ${durationMs}ms, using fallback questions:`,
-          aiErr?.message
-        );
+        logServerError('interview_start.gemini', aiErr, {
+          route: '/api/interview/start',
+          userId,
+          elapsedMs: durationMs,
+          extra: { fallback: true },
+        });
         questionsResult = getFallbackQuestions(targetRole, missingSkills, priorQuestions);
       }
     } else {
@@ -174,7 +177,9 @@ export async function POST(req: NextRequest) {
       }
     );
   } catch (err: any) {
-    console.error('[Interview] Start POST error:', err);
+    logServerError('interview_start.request', err, {
+      route: '/api/interview/start',
+    });
     return NextResponse.json({ error: 'Failed to start interview session' }, { status: 500 });
   }
 }

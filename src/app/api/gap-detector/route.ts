@@ -9,6 +9,7 @@ import { hashSkills } from '@/lib/utils/role-key';
 import { computeReadiness } from '@/lib/scoring/compute-readiness';
 import { skillsMatch } from '@/lib/scoring/skill-matching';
 import { enforceAiRateLimit } from '@/lib/ai/rate-limit';
+import { logServerError } from '@/lib/logging/server-error';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -142,10 +143,12 @@ export async function POST(req: NextRequest) {
         };
       } catch (aiError: any) {
         const durationMs = Math.round(performance.now() - startTime);
-        console.warn(
-          `[GapDetector] Gemini AI failed after ${durationMs}ms; using deterministic benchmark fallback.`,
-          aiError instanceof Error ? aiError.name : 'UnknownError'
-        );
+        logServerError('gap_detector.gemini', aiError, {
+          route: '/api/gap-detector',
+          userId,
+          elapsedMs: durationMs,
+          extra: { fallback: true },
+        });
         output = generateFallbackSkillGap(targetRole, currentSkills, seedRole);
       }
     } else {
@@ -193,10 +196,11 @@ export async function POST(req: NextRequest) {
       });
     } catch (dbError: unknown) {
       persisted = false;
-      console.warn(
-        '[GapDetector] Report save failed; returning an unsaved report.',
-        dbError instanceof Error ? dbError.name : 'UnknownError'
-      );
+      logServerError('gap_detector.persist', dbError, {
+        route: '/api/gap-detector',
+        userId,
+        extra: { persisted: false },
+      });
     }
 
     return NextResponse.json({ ...output, persisted }, {
@@ -204,10 +208,7 @@ export async function POST(req: NextRequest) {
       headers: { 'Cache-Control': 'no-store, max-age=0' },
     });
   } catch (error: unknown) {
-    console.error(
-      'Skill Gap Detection Error:',
-      error instanceof Error ? error.name : 'UnknownError'
-    );
+    logServerError('gap_detector.request', error, { route: '/api/gap-detector' });
     return NextResponse.json(
       { error: 'An unexpected error occurred during skill gap analysis.' },
       { status: 500 }

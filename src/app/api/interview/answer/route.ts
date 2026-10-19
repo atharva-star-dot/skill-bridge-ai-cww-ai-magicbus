@@ -15,6 +15,7 @@ import {
 import { evaluateAnswerFallback } from '@/lib/ai/fallbacks/interview.fallback';
 import { hasFiveScoredAnswers } from '@/lib/interview/completion';
 import { enforceAiRateLimit } from '@/lib/ai/rate-limit';
+import { logServerError } from '@/lib/logging/server-error';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -100,10 +101,12 @@ export async function POST(req: NextRequest) {
         evaluation = { ...aiResult, source: 'ai' };
       } catch (aiErr: any) {
         const durationMs = Math.round(performance.now() - startTime);
-        console.warn(
-          `[Interview:Answer] Gemini scoring failed after ${durationMs}ms; using deterministic fallback.`,
-          aiErr instanceof Error ? aiErr.name : 'UnknownError'
-        );
+        logServerError('interview_answer.gemini', aiErr, {
+          route: '/api/interview/answer',
+          userId,
+          elapsedMs: durationMs,
+          extra: { fallback: true },
+        });
         evaluation = evaluateAnswerFallback(
           session.targetRole,
           targetAnswer.questionType as QuestionType,
@@ -220,10 +223,9 @@ export async function POST(req: NextRequest) {
       }
     );
   } catch (err: unknown) {
-    console.error(
-      '[Interview] Answer POST error:',
-      err instanceof Error ? err.name : 'UnknownError'
-    );
+    logServerError('interview_answer.request', err, {
+      route: '/api/interview/answer',
+    });
     return NextResponse.json({ error: 'Failed to evaluate answer' }, { status: 500 });
   }
 }

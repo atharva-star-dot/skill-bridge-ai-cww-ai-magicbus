@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { prisma } from '@/lib/db';
 import { safeJsonParse } from '@/lib/utils/safe-json';
+import { logServerError } from '@/lib/logging/server-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,10 +103,7 @@ export async function GET() {
       },
     });
   } catch (err: unknown) {
-    console.error(
-      '[MyData:GET] Export failed:',
-      err instanceof Error ? err.name : 'UnknownError'
-    );
+    logServerError('my_data.export', err, { route: '/api/my-data' });
     return NextResponse.json({ error: 'Failed to export user data' }, { status: 500 });
   }
 }
@@ -138,10 +136,7 @@ export async function DELETE() {
 
     return NextResponse.json({ success: true, message: 'All user data successfully deleted' });
   } catch (err: unknown) {
-    console.error(
-      '[MyData:DELETE] Account deletion failed:',
-      err instanceof Error ? err.name : 'UnknownError'
-    );
+    logServerError('my_data.delete', err, { route: '/api/my-data' });
     return NextResponse.json({ error: 'Failed to delete user account' }, { status: 500 });
   }
 }

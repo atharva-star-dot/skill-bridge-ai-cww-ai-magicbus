@@ -1,5 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import type { GenerateContentResult } from '@google/generative-ai';
 import { ZodSchema } from 'zod';
+import { logServerError } from '@/lib/logging/server-error';
 
 const DEFAULT_PRIMARY_MODEL = 'gemini-2.5-flash';
 const MAX_MODELS = 2;
@@ -35,6 +37,7 @@ export async function executeGeminiWithRetry<T>(
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   let deadlineReject: ((_reason?: Error) => void) | undefined;
   let deadlineExceeded = false;
+  let inFlightRequest: Promise<GenerateContentResult> | undefined;
   const deadlineError = new Error('Gemini overall deadline exceeded');
   const deadlinePromise = new Promise<never>((_, reject) => {
     deadlineReject = reject;
@@ -70,11 +73,12 @@ export async function executeGeminiWithRetry<T>(
         }
 
         try {
+          inFlightRequest = model.generateContent(prompt, { signal: controller.signal });
           const result = await Promise.race([
-            model.generateContent(prompt, { signal: controller.signal }),
+            inFlightRequest,
             deadlinePromise,
           ]);
-          const response = await Promise.race([result.response, deadlinePromise]);
+          const response = await Promise.race([Promise.resolve(result.response), deadlinePromise]);
           let rawText = response.text() || '';
 
           rawText = rawText.trim();
@@ -87,7 +91,10 @@ export async function executeGeminiWithRetry<T>(
           const validationResult = schema.safeParse(parsedJson);
 
           if (!validationResult.success) {
-            console.error(`[Gemini] Zod validation failed (${modelName}).`);
+            logServerError('gemini.response_validation', validationResult.error, {
+              route: 'gemini',
+              extra: { model: modelName },
+            });
             throw new Error(`AI JSON does not match schema: ${validationResult.error.message}`);
           }
 
@@ -125,5 +132,6 @@ export async function executeGeminiWithRetry<T>(
     throw error;
   } finally {
     if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+    if (deadlineExceeded && inFlightRequest) await Promise.allSettled([inFlightRequest]);
   }
 }

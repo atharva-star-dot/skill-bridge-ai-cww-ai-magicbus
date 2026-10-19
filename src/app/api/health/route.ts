@@ -1,16 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { logServerError } from '@/lib/logging/server-error';
 
 export const dynamic = 'force-dynamic';
-
-function databaseDiagnostic(error: unknown): string {
-  const diagnostic =
-    error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-
-  return diagnostic
-    .replace(/(postgres(?:ql)?:\/\/[^:/\s]+:)[^@\s]+@/gi, '$1[REDACTED]@')
-    .replace(/((?:password|pwd)\s*[=:]\s*)\S+/gi, '$1[REDACTED]');
-}
 
 /**
  * GET /api/health
@@ -23,7 +15,7 @@ export async function GET() {
     await prisma.$queryRaw`SELECT 1`;
     database = true;
   } catch (error: unknown) {
-    console.error('[Health] Database check failed:', databaseDiagnostic(error));
+    logServerError('health.database', error, { route: '/api/health' });
     database = false;
   }
 

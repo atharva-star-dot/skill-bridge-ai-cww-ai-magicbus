@@ -6,6 +6,7 @@ import { SEED_ROLES } from '@/data/seed-roles';
 import { computeReadiness } from '@/lib/scoring/compute-readiness';
 import { textContainsSkill } from '@/lib/scoring/skill-matching';
 import { safeJsonParse } from '@/lib/utils/safe-json';
+import { logServerError } from '@/lib/logging/server-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -154,10 +155,9 @@ export async function PATCH(
       }
     );
   } catch (error: unknown) {
-    console.error(
-      '[TaskToggle] Request failed:',
-      error instanceof Error ? error.name : 'UnknownError'
-    );
+    logServerError('learning_plan.task_patch', error, {
+      route: '/api/learning-plan/task/[taskId]',
+    });
     return NextResponse.json(
       { error: 'Failed to update task' },
       { status: 500 }

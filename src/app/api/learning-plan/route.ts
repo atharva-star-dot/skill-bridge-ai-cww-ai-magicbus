@@ -7,6 +7,7 @@ import { buildLearningPlanPrompt } from '@/lib/ai/prompts/learning-plan.prompt';
 import { generateFallbackLearningPlan } from '@/lib/ai/fallbacks/learning-plan.fallback';
 import type { MissingSkillItem } from '@/lib/schemas/gap-detector.schema';
 import { enforceAiRateLimit } from '@/lib/ai/rate-limit';
+import { logServerError } from '@/lib/logging/server-error';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -130,7 +131,12 @@ export async function POST(req: NextRequest) {
         output = { ...aiResult, durationWeeks, source: 'ai' };
       } catch (aiError: any) {
         const durationMs = Math.round(performance.now() - startTime);
-        console.warn(`[LearningPlan] Gemini failed after ${durationMs}ms, using fallback:`, aiError?.message);
+        logServerError('learning_plan.gemini', aiError, {
+          route: '/api/learning-plan',
+          userId,
+          elapsedMs: durationMs,
+          extra: { fallback: true },
+        });
         output = generateFallbackLearningPlan(targetRole, missingSkills, matchedSkills, durationWeeks);
       }
     } else {
@@ -189,11 +195,15 @@ export async function POST(req: NextRequest) {
         { status: 200, headers: { 'Cache-Control': 'no-store' } }
       );
     } catch (dbError: any) {
-      console.warn('[LearningPlan] DB save failed (returning in-memory plan):', dbError?.message);
+      logServerError('learning_plan.persist', dbError, {
+        route: '/api/learning-plan',
+        userId,
+        extra: { persisted: false },
+      });
       return NextResponse.json(output, { status: 200, headers: { 'Cache-Control': 'no-store' } });
     }
   } catch (error: any) {
-    console.error('[LearningPlan] Unexpected error:', error);
+    logServerError('learning_plan.request', error, { route: '/api/learning-plan' });
     return NextResponse.json(
       { error: error?.message || 'An unexpected error occurred generating the learning plan.' },
       { status: 500 }

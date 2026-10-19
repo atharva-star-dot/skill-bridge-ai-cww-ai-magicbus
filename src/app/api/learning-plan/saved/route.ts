@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createClient } from '@/lib/supabase/server';
+import { logServerError } from '@/lib/logging/server-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -108,7 +109,9 @@ export async function GET(_req: NextRequest) {
       }
     );
   } catch (err: any) {
-    console.error('[SavedPlan] Error:', err);
+    logServerError('learning_plan.saved_get', err, {
+      route: '/api/learning-plan/saved',
+    });
     return NextResponse.json(
       { hasGapReport: false },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }

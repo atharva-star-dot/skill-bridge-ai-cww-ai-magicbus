@@ -14,6 +14,7 @@ import {
 import { generateFallbackResumeReview } from '@/lib/ai/fallbacks/resume-checker.fallback';
 import { SEED_ROLES } from '@/data/seed-roles';
 import { enforceAiRateLimit } from '@/lib/ai/rate-limit';
+import { logServerError } from '@/lib/logging/server-error';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -94,10 +95,12 @@ export async function POST(req: NextRequest) {
         output = { ...aiResult, source: 'ai' };
       } catch (aiError: any) {
         const durationMs = Math.round(performance.now() - startTime);
-        console.warn(
-          `[ResumeChecker] Gemini AI failed after ${durationMs}ms; using deterministic fallback.`,
-          aiError instanceof Error ? aiError.name : 'UnknownError'
-        );
+        logServerError('resume_checker.gemini', aiError, {
+          route: '/api/resume-checker',
+          userId,
+          elapsedMs: durationMs,
+          extra: { fallback: true },
+        });
         output = generateFallbackResumeReview(targetRole, resumeText, benchmarkSkills);
       }
     } else {
@@ -143,10 +146,11 @@ export async function POST(req: NextRequest) {
         });
       });
     } catch (dbError: unknown) {
-      console.warn(
-        '[ResumeChecker] Database save failed.',
-        dbError instanceof Error ? dbError.name : 'UnknownError'
-      );
+      logServerError('resume_checker.persist', dbError, {
+        route: '/api/resume-checker',
+        userId,
+        extra: { persisted: false },
+      });
     }
 
     return NextResponse.json(finalOutput, {
@@ -154,10 +158,7 @@ export async function POST(req: NextRequest) {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (error: unknown) {
-    console.error(
-      '[ResumeChecker] Request failed:',
-      error instanceof Error ? error.name : 'UnknownError'
-    );
+    logServerError('resume_checker.request', error, { route: '/api/resume-checker' });
     return NextResponse.json(
       { error: 'An unexpected error occurred during resume review.' },
       { status: 500 }

@@ -16,6 +16,7 @@ import { generateSummaryFallback } from '@/lib/ai/fallbacks/interview.fallback';
 import { hasFiveScoredAnswers } from '@/lib/interview/completion';
 import { z } from 'zod';
 import { enforceAiRateLimit } from '@/lib/ai/rate-limit';
+import { logServerError } from '@/lib/logging/server-error';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -151,10 +152,12 @@ export async function POST(req: NextRequest) {
         summaryData = { ...aiResult, source: 'ai' };
       } catch (aiErr: any) {
         const durationMs = Math.round(performance.now() - startTime);
-        console.warn(
-          `[Interview:Summary] Gemini summary failed after ${durationMs}ms; using fallback.`,
-          aiErr instanceof Error ? aiErr.name : 'UnknownError'
-        );
+        logServerError('interview_summary.gemini', aiErr, {
+          route: '/api/interview/summary',
+          userId,
+          elapsedMs: durationMs,
+          extra: { fallback: true },
+        });
         const fallback = generateSummaryFallback(
           session.targetRole,
           perQuestionScores,
@@ -210,10 +213,9 @@ export async function POST(req: NextRequest) {
       }
     );
   } catch (err: unknown) {
-    console.error(
-      '[Interview] Summary POST error:',
-      err instanceof Error ? err.name : 'UnknownError'
-    );
+    logServerError('interview_summary.request', err, {
+      route: '/api/interview/summary',
+    });
     return NextResponse.json(
       { error: 'Failed to generate interview summary' },
       { status: 500 }

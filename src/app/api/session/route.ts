@@ -6,6 +6,7 @@ import { SEED_ROLES } from '@/data/seed-roles';
 import { computeReadiness } from '@/lib/scoring/compute-readiness';
 import { textContainsSkill } from '@/lib/scoring/skill-matching';
 import { safeJsonParse } from '@/lib/utils/safe-json';
+import { logServerError } from '@/lib/logging/server-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -193,7 +194,7 @@ export async function GET(_req: NextRequest) {
       }
     );
   } catch (err: any) {
-    console.error('Session GET error:', err);
+    logServerError('session.get', err, { route: '/api/session' });
     return NextResponse.json({ error: 'Failed to fetch session' }, { status: 500 });
   }
 }
@@ -257,10 +258,7 @@ export async function POST(req: NextRequest) {
       }
     );
   } catch (err: unknown) {
-    console.error(
-      'Session POST error:',
-      err instanceof Error ? err.name : 'UnknownError'
-    );
+    logServerError('session.post', err, { route: '/api/session' });
     return NextResponse.json({ error: 'Failed to update session' }, { status: 500 });
   }
 }

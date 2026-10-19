@@ -27,7 +27,7 @@ describe("GET /api/health", () => {
     });
   });
 
-  it("logs database diagnostics but exposes no raw error when degraded", async () => {
+  it("logs structured database diagnostics but exposes no raw error when degraded", async () => {
     const error = new Error("synthetic database diagnostic");
     vi.mocked(prisma.$queryRaw).mockRejectedValue(error);
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -41,7 +41,9 @@ describe("GET /api/health", () => {
       database: false,
       gemini: false,
     });
-    expect(JSON.stringify(log.mock.calls)).toContain(error.message);
+    expect(String(log.mock.calls[0][0])).toContain('"scope":"health.database"');
+    expect(String(log.mock.calls[0][0])).toContain('"code":"UNCLASSIFIED"');
+    expect(JSON.stringify(log.mock.calls)).not.toContain(error.message);
     expect(JSON.stringify(body)).not.toContain(error.message);
     log.mockRestore();
   });

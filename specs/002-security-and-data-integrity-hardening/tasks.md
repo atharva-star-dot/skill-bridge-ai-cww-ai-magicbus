@@ -278,3 +278,28 @@
 - Test tasks in US1, US2, US5, US7, US8, US9, US10, and US11 must be run and observed failing before their corresponding implementation begins.
 - Do not edit feature 001 contract documents; `contracts/route-deltas.md` is the feature 002 delta.
 - Run SQL against a disposable/development Supabase project first; do not run account deletion or destructive cleanup on production data.
+
+## Gap Closure (from `/speckit.analyze`)
+
+G1–G5 close the previously identified logging, RLS, integration-evidence, and manual-verification gaps. G3 database integration tests are intentionally prepared but remain unchecked and unrun until `TEST_DATABASE_URL` is available.
+
+### G1 — Actionable server diagnostics (SC-008)
+
+- [x] T077 Add focused tests and `src/lib/logging/server-error.ts` with structured, redacted diagnostics; replace unsafe or name-only route, auth-callback, health, AI, and persistence error logging.
+
+### G2 — Application-table RLS policies (SC-013)
+
+- [x] T078 Add idempotent `supabase/05_rls_policies.sql`, append it to `supabase/00_RUN_ALL.sql`, and document policy and privilege verification in `supabase/README.md`.
+
+### G4 — Real route deadline evidence (SC-006)
+
+- [x] T079 Exercise real AI route handlers against a local hanging HTTP stub with real timers; assert fallback under 25 seconds and no leaked timers or sockets.
+
+### G5 — Read-only Supabase verification and manual deletion checklist (SC-003, SC-010, T076)
+
+- [x] T080 Add `scripts/verify-supabase.ts` read-only SC-tagged checks and `specs/002-security-and-data-integrity-hardening/manual-verification.md`; leave T076 unchecked until the user provides verification output and completed checklist.
+
+### G3 — Real Postgres integration test scaffolding (SC-007, SC-012, SC-014)
+
+- [ ] T081 Add `vitest.int.config.ts`, the `test:int` script in `package.json`, and `tests/integration/setup.ts` plus `tests/integration/stub-auth.ts` to apply `supabase/00_RUN_ALL.sql` only when `TEST_DATABASE_URL` is configured.
+- [ ] T082 Add `.github/workflows/postgres-integration.yml` and `tests/integration/security-and-data-integrity.int.test.ts` for real-database concurrency, interview-answer race, session-cap, and Prisma schema-parity checks. Do not execute these tasks without `TEST_DATABASE_URL`.

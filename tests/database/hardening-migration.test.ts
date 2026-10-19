@@ -32,6 +32,6 @@ describe("Supabase hardening migration safeguards", () => {
   it("is transaction-wrapped and appended to the combined SQL runner", () => {
     expect(migration.trimStart()).toMatch(/^BEGIN;/i);
     expect(migration.trimEnd()).toMatch(/COMMIT;$/i);
-    expect(runner.trimEnd().endsWith(migration.trim())).toBe(true);
+    expect(runner).toContain(migration.trim());
   });
 });

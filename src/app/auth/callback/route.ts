@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/db';
 import { getSafeRedirectPath } from '@/lib/utils/redirect';
+import { logServerError } from '@/lib/logging/server-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +25,12 @@ export async function GET(request: Request) {
         if (!profile || !profile.targetRole) {
           return NextResponse.redirect(`${origin}/onboarding`);
         }
-      } catch {
+      } catch (error: unknown) {
+        logServerError('auth_callback.profile_lookup', error, {
+          route: '/auth/callback',
+          userId: data.user.id,
+          extra: { destinationFallback: true },
+        });
         // Fallback to dashboard
       }
 
